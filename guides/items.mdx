@@ -1,0 +1,825 @@
+---
+title: 'Items'
+description: 'Complete guide to working with items in Minestom'
+---
+
+## Overview
+
+Items in Minestom are represented by the `ItemStack` class, which follows an **immutable** design pattern. This means once an ItemStack is created, it cannot be modified directly - instead, you create new ItemStack instances with the desired changes.
+
+<Note>
+**Never use `null` for items!** Always use `ItemStack.AIR` instead of null when representing the absence of an item.
+</Note>
+
+## Creating Items
+
+### Basic Creation
+
+The simplest way to create an item is using the static factory methods:
+
+```java
+// Create a single item
+ItemStack stone = ItemStack.of(Material.STONE);
+
+// Create a stack with a specific amount
+ItemStack diamonds = ItemStack.of(Material.DIAMOND, 64);
+```
+
+### Using the Builder Pattern
+
+For more complex items, use the builder pattern:
+
+```java
+ItemStack customItem = ItemStack.builder(Material.DIAMOND_SWORD)
+    .amount(1)
+    .customName(Component.text("Legendary Sword"))
+    .lore(
+        Component.text("A powerful weapon"),
+        Component.text("Forged in the depths")
+    )
+    .build();
+```
+
+## Material Types
+
+Materials represent the type of item. Minestom provides all vanilla Minecraft materials through the `Material` interface.
+
+### Common Materials
+
+```java
+Material.STONE
+Material.DIAMOND
+Material.IRON_SWORD
+Material.GOLDEN_APPLE
+Material.ENCHANTED_GOLDEN_APPLE
+```
+
+### Material Properties
+
+You can check various properties of materials:
+
+```java
+Material material = Material.STONE;
+
+// Check if the material is a block
+boolean isBlock = material.isBlock();
+
+// Get the block form (if it exists)
+Block block = material.block();
+
+// Check if it's armor
+boolean isArmor = material.isArmor();
+
+// Get max stack size
+int maxStack = material.maxStackSize(); // Default: 64
+```
+
+### Getting Materials by Key
+
+```java
+// From string key
+Material stone = Material.fromKey("minecraft:stone");
+
+// From Key object
+Material diamond = Material.fromKey(Key.key("minecraft:diamond"));
+
+// From numeric ID
+Material item = Material.fromId(1);
+```
+
+## Understanding Immutability
+
+Since ItemStack is immutable, all modification methods return a **new** ItemStack:
+
+```java
+ItemStack original = ItemStack.of(Material.STONE, 1);
+
+// This creates a NEW ItemStack - original is unchanged
+ItemStack modified = original.withAmount(64);
+
+// original is still 1, modified is 64
+System.out.println(original.amount()); // 1
+System.out.println(modified.amount()); // 64
+```
+
+<Warning>
+Always use the returned ItemStack from modification methods. The original ItemStack is never changed.
+</Warning>
+
+## Data Components System
+
+Minestom uses a **data component system** (matching vanilla Minecraft 1.20.5+) for item properties. Components are accessed through the `DataComponents` class.
+
+### Common Components
+
+```java
+// Custom name
+DataComponents.CUSTOM_NAME
+
+// Lore (list of components)
+DataComponents.LORE
+
+// Enchantments
+DataComponents.ENCHANTMENTS
+
+// Max stack size
+DataComponents.MAX_STACK_SIZE
+
+// Damage (durability)
+DataComponents.DAMAGE
+
+// Max damage (max durability)
+DataComponents.MAX_DAMAGE
+
+// Unbreakable flag
+DataComponents.UNBREAKABLE
+
+// Custom model data
+DataComponents.CUSTOM_MODEL_DATA
+
+// Enchantment glint override
+DataComponents.ENCHANTMENT_GLINT_OVERRIDE
+
+// Food properties
+DataComponents.FOOD
+
+// Consumable properties
+DataComponents.CONSUMABLE
+```
+
+### Setting Components
+
+<Steps>
+  <Step title="Using with() method">
+    Set a component value using the `with()` method:
+    
+    ```java
+    ItemStack item = ItemStack.of(Material.DIAMOND_SWORD)
+        .with(DataComponents.CUSTOM_NAME, Component.text("Excalibur"))
+        .with(DataComponents.LORE, List.of(
+            Component.text("A legendary blade"),
+            Component.text("Said to grant immense power")
+        ));
+    ```
+  </Step>
+  
+  <Step title="Using builder pattern">
+    Or use the builder's `set()` method:
+    
+    ```java
+    ItemStack item = ItemStack.builder(Material.DIAMOND_SWORD)
+        .set(DataComponents.CUSTOM_NAME, Component.text("Excalibur"))
+        .set(DataComponents.LORE, List.of(
+            Component.text("A legendary blade")
+        ))
+        .build();
+    ```
+  </Step>
+  
+  <Step title="Using convenience methods">
+    Many components have convenience methods:
+    
+    ```java
+    ItemStack item = ItemStack.of(Material.DIAMOND_SWORD)
+        .withCustomName(Component.text("Excalibur"))
+        .withLore(
+            Component.text("A legendary blade"),
+            Component.text("Said to grant immense power")
+        );
+    ```
+  </Step>
+</Steps>
+
+### Getting Component Values
+
+```java
+ItemStack item = /* ... */;
+
+// Get a component value (returns null if not present)
+Component name = item.get(DataComponents.CUSTOM_NAME);
+
+// Get with a default value
+int maxStack = item.get(DataComponents.MAX_STACK_SIZE, 64);
+
+// Check if a component exists
+boolean hasName = item.has(DataComponents.CUSTOM_NAME);
+```
+
+### Removing Components
+
+```java
+// Explicitly remove a component
+ItemStack item = itemWithName.without(DataComponents.CUSTOM_NAME);
+```
+
+<Note>
+Removing a component explicitly removes it from the item, rather than reverting to the default. For example, removing `FOOD` from an apple makes it non-edible.
+</Note>
+
+## Common Item Modifications
+
+### Custom Names and Lore
+
+```java
+ItemStack namedItem = ItemStack.builder(Material.DIAMOND)
+    .customName(Component.text("Rare Diamond")
+        .color(NamedTextColor.AQUA))
+    .lore(
+        Component.text("Found in the depths"),
+        Component.text("Very valuable")
+    )
+    .build();
+```
+
+### Enchantments
+
+Enchantments are stored in an `EnchantmentList`:
+
+```java
+import net.minestom.server.item.component.EnchantmentList;
+import net.minestom.server.item.enchant.Enchantment;
+
+ItemStack enchantedSword = ItemStack.builder(Material.DIAMOND_SWORD)
+    .set(DataComponents.ENCHANTMENTS, 
+        new EnchantmentList(Enchantment.SHARPNESS, 5))
+    .build();
+
+// Add multiple enchantments
+EnchantmentList enchants = EnchantmentList.EMPTY
+    .with(Enchantment.SHARPNESS, 5)
+    .with(Enchantment.FIRE_ASPECT, 2)
+    .with(Enchantment.UNBREAKING, 3);
+
+ItemStack sword = ItemStack.of(Material.DIAMOND_SWORD)
+    .with(DataComponents.ENCHANTMENTS, enchants);
+```
+
+### Durability and Damage
+
+```java
+ItemStack tool = ItemStack.builder(Material.DIAMOND_PICKAXE)
+    .set(DataComponents.MAX_DAMAGE, 1561)  // Max durability
+    .set(DataComponents.DAMAGE, 100)        // Current damage
+    .build();
+
+// Damage an item
+ItemStack damaged = tool.damage(50); // Adds 50 damage
+
+// Make item unbreakable
+ItemStack unbreakable = tool.with(DataComponents.UNBREAKABLE);
+```
+
+### Custom Model Data
+
+```java
+import net.minestom.server.item.component.CustomModelData;
+import net.kyori.adventure.util.RGBLike;
+
+ItemStack customModel = ItemStack.builder(Material.STICK)
+    .customModelData(
+        List.of(1.0f, 2.0f),           // floats
+        List.of(true, false),          // flags
+        List.of("custom", "data"),     // strings
+        List.of(Color.rgb(255, 0, 0))  // colors
+    )
+    .build();
+```
+
+### Glowing Effect
+
+```java
+// Make an item glow (enchantment glint)
+ItemStack glowing = ItemStack.of(Material.STICK)
+    .withGlowing(true);
+
+// Or using builder
+ItemStack glowingItem = ItemStack.builder(Material.STICK)
+    .glowing()
+    .build();
+```
+
+### Max Stack Size
+
+```java
+// Change max stack size
+ItemStack singleStack = ItemStack.of(Material.ENDER_PEARL)
+    .withMaxStackSize(1);
+
+// Or using builder
+ItemStack item = ItemStack.builder(Material.DIAMOND)
+    .maxStackSize(64)
+    .build();
+```
+
+### Unbreakable Items
+
+```java
+ItemStack unbreakable = ItemStack.of(Material.DIAMOND_SWORD)
+    .with(DataComponents.UNBREAKABLE);
+```
+
+## Item Meta
+
+### Food Items
+
+```java
+import net.minestom.server.item.component.Food;
+
+ItemStack customFood = ItemStack.builder(Material.APPLE)
+    .set(DataComponents.FOOD, new Food(
+        4,       // nutrition
+        0.3f,    // saturation modifier
+        false    // can always eat
+    ))
+    .build();
+```
+
+### Consumable Items
+
+```java
+import net.minestom.server.item.component.Consumable;
+import net.minestom.server.item.ItemAnimation;
+import net.minestom.server.sound.SoundEvent;
+
+ItemStack consumable = ItemStack.builder(Material.IRON_NUGGET)
+    .set(DataComponents.CONSUMABLE, new Consumable(
+        1.0f,                          // consume time (seconds)
+        ItemAnimation.EAT,             // animation
+        SoundEvent.BLOCK_CHAIN_STEP,   // sound
+        true,                          // has consume particles
+        new ArrayList<>()              // consume effects
+    ))
+    .build();
+```
+
+### Armor Trim
+
+```java
+import net.minestom.server.item.component.ArmorTrim;
+import net.minestom.server.item.armor.TrimMaterial;
+import net.minestom.server.item.armor.TrimPattern;
+import net.minestom.server.registry.Holder;
+
+ItemStack trimmedArmor = ItemStack.builder(Material.DIAMOND_CHESTPLATE)
+    .set(DataComponents.TRIM, new ArmorTrim(
+        Holder.direct(TrimMaterial.COPPER),
+        Holder.direct(TrimPattern.COAST)
+    ))
+    .build();
+```
+
+### Charged Projectiles (Crossbow)
+
+```java
+ItemStack loadedCrossbow = ItemStack.of(Material.CROSSBOW)
+    .with(DataComponents.CHARGED_PROJECTILES, List.of(
+        ItemStack.of(Material.ARROW)
+    ));
+```
+
+### Bundle Contents
+
+```java
+ItemStack bundle = ItemStack.builder(Material.BUNDLE)
+    .set(DataComponents.BUNDLE_CONTENTS, List.of(
+        ItemStack.of(Material.DIAMOND, 5),
+        ItemStack.of(Material.RABBIT_FOOT, 5)
+    ))
+    .build();
+```
+
+### Block Predicates (Adventure Mode)
+
+```java
+import net.minestom.server.item.component.BlockPredicates;
+import net.minestom.server.instance.block.predicate.BlockPredicate;
+import net.minestom.server.instance.block.Block;
+
+ItemStack adventureTool = ItemStack.builder(Material.DIAMOND_PICKAXE)
+    .set(DataComponents.CAN_BREAK, new BlockPredicates(
+        new BlockPredicate(Block.DIAMOND_ORE)
+    ))
+    .set(DataComponents.CAN_PLACE_ON, new BlockPredicates(
+        new BlockPredicate(Block.STONE)
+    ))
+    .build();
+```
+
+## Giving Items to Players
+
+### Adding to Inventory
+
+```java
+Player player = /* ... */;
+
+// Add a single item
+ItemStack item = ItemStack.of(Material.DIAMOND, 10);
+player.getInventory().addItemStack(item);
+
+// Add multiple items
+List<ItemStack> items = List.of(
+    ItemStack.of(Material.DIAMOND, 64),
+    ItemStack.of(Material.GOLD_INGOT, 32),
+    ItemStack.of(Material.IRON_INGOT, 16)
+);
+player.getInventory().addItemStacks(items);
+```
+
+### Setting Specific Slots
+
+```java
+PlayerInventory inventory = player.getInventory();
+
+// Set main hand (slot 0-8)
+inventory.setItemStack(0, ItemStack.of(Material.DIAMOND_SWORD));
+
+// Set armor slots
+inventory.setHelmet(ItemStack.of(Material.DIAMOND_HELMET));
+inventory.setChestplate(ItemStack.of(Material.DIAMOND_CHESTPLATE));
+inventory.setLeggings(ItemStack.of(Material.DIAMOND_LEGGINGS));
+inventory.setBoots(ItemStack.of(Material.DIAMOND_BOOTS));
+
+// Set offhand
+inventory.setItemInOffHand(ItemStack.of(Material.SHIELD));
+```
+
+### Using Transactions
+
+```java
+import net.minestom.server.inventory.TransactionOption;
+
+// Add items with transaction options
+player.getInventory().addItemStacks(items, TransactionOption.ALL);
+```
+
+## Item Events
+
+### Item Drop Event
+
+Triggered when a player drops an item:
+
+```java
+globalEventHandler.addListener(ItemDropEvent.class, event -> {
+    Player player = event.getPlayer();
+    ItemStack droppedItem = event.getItemStack();
+    
+    // Cancel the drop
+    // event.setCancelled(true);
+    
+    // Spawn item entity in the world
+    Pos playerPos = player.getPosition();
+    ItemEntity itemEntity = new ItemEntity(droppedItem);
+    itemEntity.setPickupDelay(Duration.of(500, TimeUnit.MILLISECOND));
+    itemEntity.setInstance(player.getInstance(), playerPos.withY(y -> y + 1.5));
+    
+    Vec velocity = playerPos.direction().mul(6);
+    itemEntity.setVelocity(velocity);
+});
+```
+
+### Item Pickup Event
+
+Triggered when a living entity picks up an item:
+
+```java
+globalEventHandler.addListener(PickupItemEvent.class, event -> {
+    Entity entity = event.getLivingEntity();
+    ItemStack itemStack = event.getItemStack();
+    
+    if (entity instanceof Player player) {
+        // Cancel if player doesn't have space
+        boolean hasSpace = player.getInventory().addItemStack(itemStack);
+        event.setCancelled(!hasSpace);
+    }
+});
+```
+
+### Item Use Events
+
+<Tabs>
+  <Tab title="Begin Use">
+    ```java
+    globalEventHandler.addListener(PlayerBeginItemUseEvent.class, event -> {
+        Player player = event.getPlayer();
+        ItemStack itemStack = event.getItemStack();
+        PlayerHand hand = event.getHand();
+        
+        // Example: Check for loaded crossbow
+        if (itemStack.material() == Material.CROSSBOW) {
+            List<ItemStack> projectiles = itemStack.get(
+                DataComponents.CHARGED_PROJECTILES, 
+                List.of()
+            );
+            
+            if (!projectiles.isEmpty()) {
+                // Shoot the arrow
+                player.setItemInHand(hand, 
+                    itemStack.without(DataComponents.CHARGED_PROJECTILES));
+                player.sendMessage("pew pew!");
+                event.setItemUseDuration(0); // Don't start using
+            }
+        }
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Finish Use">
+    ```java
+    globalEventHandler.addListener(PlayerFinishItemUseEvent.class, event -> {
+        Player player = event.getPlayer();
+        ItemStack itemStack = event.getItemStack();
+        
+        if (itemStack.material() == Material.APPLE) {
+            player.sendMessage("yummy yummy apple");
+        }
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Cancel Use">
+    ```java
+    globalEventHandler.addListener(PlayerCancelItemUseEvent.class, event -> {
+        Player player = event.getPlayer();
+        ItemStack itemStack = event.getItemStack();
+        PlayerHand hand = event.getHand();
+        
+        // Example: Charge crossbow when cancelled
+        if (itemStack.material() == Material.CROSSBOW 
+            && event.getUseDuration() > 25) {
+            player.setItemInHand(hand, 
+                itemStack.with(DataComponents.CHARGED_PROJECTILES, 
+                    List.of(ItemStack.of(Material.ARROW))));
+        }
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Use Item On Block
+
+```java
+globalEventHandler.addListener(PlayerUseItemOnBlockEvent.class, event -> {
+    if (event.getHand() != PlayerHand.MAIN) return;
+    
+    Player player = event.getPlayer();
+    ItemStack itemStack = event.getItemStack();
+    Block block = event.getInstance().getBlock(event.getPosition());
+    
+    // Example: Waterlog blocks with bucket
+    if ("false".equals(block.getProperty("waterlogged")) 
+        && itemStack.material().equals(Material.WATER_BUCKET)) {
+        block = block.withProperty("waterlogged", "true");
+        event.getInstance().setBlock(event.getPosition(), block);
+    }
+});
+```
+
+### Creative Inventory Action
+
+```java
+globalEventHandler.addListener(CreativeInventoryActionEvent.class, event -> {
+    ItemStack clickedItem = event.getClickedItem();
+    
+    // Example: Replace apples with golden apples
+    if (clickedItem.material() == Material.APPLE) {
+        event.setClickedItem(
+            ItemStack.of(Material.GOLDEN_APPLE, clickedItem.amount())
+        );
+    }
+    
+    // Example: Prevent enchanted golden apples
+    if (clickedItem.material() == Material.ENCHANTED_GOLDEN_APPLE) {
+        event.setCancelled(true);
+    }
+});
+```
+
+## Complete Examples
+
+### Custom Weapon with Enchantments
+
+```java
+public ItemStack createLegendarySword() {
+    EnchantmentList enchants = EnchantmentList.EMPTY
+        .with(Enchantment.SHARPNESS, 10)
+        .with(Enchantment.FIRE_ASPECT, 5)
+        .with(Enchantment.UNBREAKING, 10)
+        .with(Enchantment.LOOTING, 5);
+    
+    return ItemStack.builder(Material.DIAMOND_SWORD)
+        .customName(Component.text("Excalibur")
+            .color(NamedTextColor.GOLD)
+            .decorate(TextDecoration.BOLD))
+        .lore(
+            Component.text("A legendary blade from ancient times"),
+            Component.empty(),
+            Component.text("Special Abilities:")
+                .color(NamedTextColor.GRAY),
+            Component.text("• Massive damage")
+                .color(NamedTextColor.GREEN),
+            Component.text("• Sets enemies ablaze")
+                .color(NamedTextColor.RED),
+            Component.text("• Never breaks")
+                .color(NamedTextColor.AQUA)
+        )
+        .set(DataComponents.ENCHANTMENTS, enchants)
+        .glowing()
+        .build();
+}
+```
+
+### Custom Food Item
+
+```java
+public ItemStack createCustomFood() {
+    return ItemStack.builder(Material.COOKED_BEEF)
+        .customName(Component.text("Dragon Steak")
+            .color(NamedTextColor.RED))
+        .lore(Component.text("Restores health and grants strength"))
+        .set(DataComponents.FOOD, new Food(
+            20,      // nutrition (10 hunger bars)
+            2.0f,    // saturation modifier
+            true     // can always eat
+        ))
+        .set(DataComponents.CONSUMABLE, new Consumable(
+            0.8f,                        // fast eating
+            ItemAnimation.EAT,
+            SoundEvent.ENTITY_PLAYER_BURP,
+            true,
+            new ArrayList<>()
+        ))
+        .build();
+}
+```
+
+### Starter Kit
+
+```java
+public void giveStarterKit(Player player) {
+    List<ItemStack> items = List.of(
+        // Tools
+        ItemStack.of(Material.WOODEN_PICKAXE),
+        ItemStack.of(Material.WOODEN_AXE),
+        ItemStack.of(Material.WOODEN_SHOVEL),
+        
+        // Armor
+        ItemStack.of(Material.LEATHER_HELMET),
+        ItemStack.of(Material.LEATHER_CHESTPLATE),
+        ItemStack.of(Material.LEATHER_LEGGINGS),
+        ItemStack.of(Material.LEATHER_BOOTS),
+        
+        // Food
+        ItemStack.of(Material.BREAD, 16),
+        ItemStack.of(Material.COOKED_BEEF, 8),
+        
+        // Resources
+        ItemStack.of(Material.OAK_LOG, 32),
+        ItemStack.of(Material.COBBLESTONE, 64),
+        ItemStack.of(Material.TORCH, 16)
+    );
+    
+    player.getInventory().addItemStacks(items, TransactionOption.ALL);
+    
+    // Set armor directly
+    player.getInventory().setHelmet(ItemStack.of(Material.LEATHER_HELMET));
+    player.getInventory().setChestplate(ItemStack.of(Material.LEATHER_CHESTPLATE));
+    player.getInventory().setLeggings(ItemStack.of(Material.LEATHER_LEGGINGS));
+    player.getInventory().setBoots(ItemStack.of(Material.LEATHER_BOOTS));
+}
+```
+
+### Efficiency Tool for Instabreak
+
+```java
+public ItemStack createInstabreakTool() {
+    EnchantmentList efficiency = EnchantmentList.EMPTY
+        .with(Enchantment.EFFICIENCY, 5);
+    
+    return ItemStack.builder(Material.DIAMOND_PICKAXE)
+        .customName(Component.text("Instabreak Pickaxe"))
+        .set(DataComponents.ENCHANTMENTS, efficiency)
+        .with(DataComponents.UNBREAKABLE)
+        .build();
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Use ItemStack.AIR" icon="circle-xmark">
+    Never use `null` to represent no item. Always use `ItemStack.AIR` instead.
+  </Card>
+  
+  <Card title="Remember Immutability" icon="lock">
+    ItemStack methods return new instances. Always use the returned value.
+  </Card>
+  
+  <Card title="Use Components" icon="puzzle-piece">
+    Use the DataComponents system for all item properties instead of deprecated meta systems.
+  </Card>
+  
+  <Card title="Validate Materials" icon="check">
+    Check if a material exists before using it, especially when loading from config.
+  </Card>
+</CardGroup>
+
+<Tip>
+Use the builder pattern for complex items with multiple properties - it's more readable and less error-prone than chaining many `with()` calls.
+</Tip>
+
+## Advanced Topics
+
+### Custom Tags
+
+You can store custom data on items using tags:
+
+```java
+import net.minestom.server.tag.Tag;
+
+Tag<String> customTag = Tag.String("my_custom_data");
+
+ItemStack item = ItemStack.of(Material.STICK)
+    .withTag(customTag, "my value");
+
+// Read the tag
+String value = item.getTag(customTag);
+```
+
+### Item Similarity
+
+Check if two items are similar (same material and components, ignoring amount):
+
+```java
+ItemStack item1 = ItemStack.of(Material.DIAMOND, 1);
+ItemStack item2 = ItemStack.of(Material.DIAMOND, 64);
+
+boolean similar = item1.isSimilar(item2); // true
+```
+
+### Converting to NBT
+
+```java
+import net.kyori.adventure.nbt.CompoundBinaryTag;
+
+ItemStack item = ItemStack.of(Material.DIAMOND);
+
+// Convert to NBT
+CompoundBinaryTag nbt = item.toItemNBT();
+
+// Load from NBT
+ItemStack fromNbt = ItemStack.fromItemNBT(nbt);
+```
+
+### Item Consumption
+
+```java
+// Consume (decrease) amount
+ItemStack stack = ItemStack.of(Material.DIAMOND, 10);
+ItemStack consumed = stack.consume(3); // Amount is now 7
+```
+
+## Common Patterns
+
+### Modifying Items in Inventory
+
+```java
+PlayerInventory inventory = player.getInventory();
+int slot = 0;
+
+// Get current item
+ItemStack current = inventory.getItemStack(slot);
+
+// Modify it (creates new instance)
+ItemStack modified = current.withAmount(current.amount() - 1);
+
+// Set it back
+inventory.setItemStack(slot, modified);
+```
+
+### Checking Item Properties
+
+```java
+ItemStack item = player.getItemInMainHand();
+
+// Check if air
+if (item.isAir()) {
+    player.sendMessage("You're not holding anything!");
+    return;
+}
+
+// Check material
+if (item.material() == Material.DIAMOND_SWORD) {
+    player.sendMessage("Nice sword!");
+}
+
+// Check amount
+if (item.amount() > 1) {
+    player.sendMessage("You have " + item.amount() + " items");
+}
+```
+
+## Related Documentation
+
+- [Inventories](/guides/inventories) - Managing player and custom inventories
+- [Event System](/core-concepts/events) - Complete event system guide
+- [Entity Guide](/guides/entities) - Working with entities and players

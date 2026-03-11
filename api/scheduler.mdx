@@ -1,0 +1,510 @@
+---
+title: 'Scheduler & SchedulerManager'
+description: 'Schedule and manage tasks with tick-based and time-based precision'
+---
+
+## Overview
+
+Minestom's scheduler system provides a flexible way to execute tasks at specific times or intervals. The scheduler supports tick-based scheduling (aligned with the server's 20 TPS tick rate) and duration-based scheduling (using real-world time).
+
+<Note>
+Tasks are executed in the caller thread by default. For precision-critical operations, consider using a JDK executor service or third-party library.
+</Note>
+
+## Getting the Scheduler
+
+### Global Scheduler
+
+The global scheduler is accessed through `MinecraftServer.getSchedulerManager()`:
+
+```java
+SchedulerManager scheduler = MinecraftServer.getSchedulerManager();
+scheduler.scheduleNextTick(() -> {
+    System.out.println("Executed on next tick");
+});
+```
+
+### Entity and Instance Schedulers
+
+Entities and instances have their own schedulers for localized task management:
+
+```java
+// Entity scheduler
+Entity entity = ...;
+entity.scheduler().scheduleNextTick(() -> {
+    entity.setVelocity(new Vec(0, 10, 0));
+});
+
+// Instance scheduler
+Instance instance = ...;
+instance.scheduler().scheduleTask(() -> {
+    instance.sendMessage(Component.text("Server message!"));
+}, TaskSchedule.seconds(30), TaskSchedule.seconds(30));
+```
+
+## Scheduler Interface
+
+### Core Methods
+
+<ParamField path="submitTask" type="Task submitTask(Supplier<TaskSchedule> task, ExecutionType executionType)">
+  The primitive method for scheduling tasks with custom logic. The supplier is called immediately to get the initial schedule, and called again after each execution to determine the next schedule.
+  
+  ```java
+  AtomicInteger counter = new AtomicInteger(0);
+  scheduler.submitTask(() -> {
+      int count = counter.incrementAndGet();
+      System.out.println("Execution #" + count);
+      
+      // Run 5 times, then stop
+      if (count >= 5) return TaskSchedule.stop();
+      
+      // Schedule next execution in 1 second
+      return TaskSchedule.seconds(1);
+  }, ExecutionType.TICK_START);
+  ```
+</ParamField>
+
+<ParamField path="scheduleTask" type="Task scheduleTask(Runnable task, TaskSchedule delay, TaskSchedule repeat)">
+  Schedule a task with a delay and optional repeat interval.
+  
+  ```java
+  // Execute after 5 seconds, then repeat every 10 seconds
+  scheduler.scheduleTask(() -> {
+      System.out.println("Repeating task");
+  }, TaskSchedule.seconds(5), TaskSchedule.seconds(10));
+  ```
+</ParamField>
+
+<ParamField path="scheduleNextTick" type="Task scheduleNextTick(Runnable task)">
+  Schedule a task to run on the next server tick.
+  
+  ```java
+  scheduler.scheduleNextTick(() -> {
+      System.out.println("Runs next tick");
+  });
+  ```
+</ParamField>
+
+<ParamField path="scheduleNextProcess" type="Task scheduleNextProcess(Runnable task)">
+  Schedule a task to run on the next `process()` call (may be within the same tick).
+  
+  ```java
+  scheduler.scheduleNextProcess(() -> {
+      System.out.println("Runs on next process");
+  });
+  ```
+</ParamField>
+
+<ParamField path="scheduleEndOfTick" type="Task scheduleEndOfTick(Runnable task)">
+  Schedule a task to run at the end of the current tick.
+  
+  ```java
+  scheduler.scheduleEndOfTick(() -> {
+      System.out.println("Runs at tick end");
+  });
+  ```
+</ParamField>
+
+<ParamField path="buildTask" type="Task.Builder buildTask(Runnable task)">
+  Create a task builder for advanced configuration.
+  
+  ```java
+  scheduler.buildTask(() -> {
+      System.out.println("Custom task");
+  })
+  .delay(TaskSchedule.seconds(5))
+  .repeat(TaskSchedule.tick(20))
+  .executionType(ExecutionType.TICK_END)
+  .schedule();
+  ```
+</ParamField>
+
+## TaskSchedule
+
+`TaskSchedule` defines when a task should execute next. All factory methods are static.
+
+### Scheduling Patterns
+
+<ResponseField name="tick" type="TaskSchedule tick(int ticks)">
+  Schedule execution after a specific number of ticks (20 ticks = 1 second at normal TPS).
+  
+  ```java
+  TaskSchedule.tick(20)     // 1 second
+  TaskSchedule.tick(100)    // 5 seconds
+  TaskSchedule.nextTick()   // Next tick (shortcut for tick(1))
+  ```
+</ResponseField>
+
+<ResponseField name="duration" type="TaskSchedule duration(Duration duration)">
+  Schedule execution after a real-world time duration.
+  
+  ```java
+  TaskSchedule.duration(Duration.ofSeconds(30))
+  TaskSchedule.duration(5, ChronoUnit.MINUTES)
+  ```
+</ResponseField>
+
+<ResponseField name="immediate" type="TaskSchedule immediate()">
+  Execute on the next `process()` call (may be in the same tick).
+  
+  ```java
+  TaskSchedule.immediate()
+  ```
+</ResponseField>
+
+<ResponseField name="stop" type="TaskSchedule stop()">
+  Stop the task from executing again.
+  
+  ```java
+  TaskSchedule.stop()
+  ```
+</ResponseField>
+
+<ResponseField name="park" type="TaskSchedule park()">
+  Park the task until manually unparked via `Task.unpark()`.
+  
+  ```java
+  Task task = scheduler.buildTask(() -> {
+      System.out.println("Unparked!");
+  })
+  .delay(TaskSchedule.park())
+  .schedule();
+  
+  // Later, unpark the task
+  task.unpark();
+  ```
+</ResponseField>
+
+<ResponseField name="future" type="TaskSchedule future(CompletableFuture<?> future)">
+  Execute when a CompletableFuture completes.
+  
+  ```java
+  CompletableFuture<String> future = loadDataAsync();
+  scheduler.buildTask(() -> {
+      System.out.println("Data loaded!");
+  })
+  .delay(TaskSchedule.future(future))
+  .schedule();
+  ```
+</ResponseField>
+
+### Convenience Methods
+
+```java
+// Duration shortcuts
+TaskSchedule.seconds(30)
+TaskSchedule.minutes(5)
+TaskSchedule.hours(1)
+TaskSchedule.millis(500)
+
+// Tick shortcuts
+TaskSchedule.nextTick()  // tick(1)
+```
+
+## Task Interface
+
+The `Task` interface provides methods to manage scheduled tasks.
+
+<ResponseField name="id" type="int id()">
+  Returns the unique task identifier.
+</ResponseField>
+
+<ResponseField name="owner" type="Scheduler owner()">
+  Returns the scheduler that owns this task.
+</ResponseField>
+
+<ResponseField name="executionType" type="ExecutionType executionType()">
+  Returns when the task executes (`TICK_START` or `TICK_END`).
+</ResponseField>
+
+<ResponseField name="isAlive" type="boolean isAlive()">
+  Returns `true` if the task is still scheduled to run.
+</ResponseField>
+
+<ResponseField name="cancel" type="void cancel()">
+  Cancels the task, preventing future executions.
+  
+  ```java
+  Task task = scheduler.scheduleTask(() -> {
+      System.out.println("Repeating");
+  }, TaskSchedule.immediate(), TaskSchedule.seconds(1));
+  
+  // Cancel after 10 seconds
+  scheduler.scheduleTask(() -> {
+      task.cancel();
+  }, TaskSchedule.seconds(10), TaskSchedule.stop());
+  ```
+</ResponseField>
+
+<ResponseField name="isParked" type="boolean isParked()">
+  Returns `true` if the task is parked.
+</ResponseField>
+
+<ResponseField name="unpark" type="void unpark()">
+  Unparks a parked task, allowing it to execute on the next process.
+  
+  ```java
+  Task task = scheduler.buildTask(() -> {
+      System.out.println("Ready!");
+  })
+  .delay(TaskSchedule.park())
+  .schedule();
+  
+  // Unpark when condition is met
+  if (someCondition) {
+      task.unpark();
+  }
+  ```
+</ResponseField>
+
+## Task.Builder
+
+The builder pattern provides a fluent API for task configuration.
+
+<ParamField path="delay" type="Builder delay(TaskSchedule schedule)">
+  Set the initial delay before first execution.
+  
+  ```java
+  builder.delay(TaskSchedule.seconds(5))
+  builder.delay(Duration.ofMinutes(1))
+  builder.delay(10, ChronoUnit.SECONDS)
+  ```
+</ParamField>
+
+<ParamField path="repeat" type="Builder repeat(TaskSchedule schedule)">
+  Set the repeat interval (overrides the task's return value).
+  
+  ```java
+  builder.repeat(TaskSchedule.tick(20))
+  builder.repeat(Duration.ofSeconds(30))
+  builder.repeat(5, ChronoUnit.MINUTES)
+  ```
+</ParamField>
+
+<ParamField path="executionType" type="Builder executionType(ExecutionType type)">
+  Set when the task executes within the tick cycle.
+  
+  ```java
+  builder.executionType(ExecutionType.TICK_START)  // Default
+  builder.executionType(ExecutionType.TICK_END)
+  ```
+</ParamField>
+
+<ParamField path="schedule" type="Task schedule()">
+  Build and submit the task to the scheduler.
+  
+  ```java
+  Task task = builder.schedule();
+  ```
+</ParamField>
+
+## ExecutionType
+
+Controls when tasks execute during the server tick.
+
+<ResponseField name="TICK_START" type="ExecutionType">
+  Execute at the beginning of the tick (default).
+</ResponseField>
+
+<ResponseField name="TICK_END" type="ExecutionType">
+  Execute at the end of the tick, after all tick processing.
+</ResponseField>
+
+## Practical Examples
+
+### Delayed Task
+
+Execute a task once after a delay:
+
+```java
+scheduler.buildTask(() -> {
+    player.sendMessage("5 seconds have passed!");
+})
+.delay(TaskSchedule.seconds(5))
+.schedule();
+```
+
+### Repeating Task
+
+Execute a task repeatedly at fixed intervals:
+
+```java
+scheduler.scheduleTask(() -> {
+    instance.sendMessage(Component.text("Server announcement"));
+}, TaskSchedule.minutes(1), TaskSchedule.minutes(5));
+```
+
+### Conditional Execution
+
+Execute a task a specific number of times:
+
+```java
+AtomicInteger counter = new AtomicInteger(0);
+scheduler.submitTask(() -> {
+    int count = counter.incrementAndGet();
+    System.out.println("Execution #" + count);
+    
+    // Stop after 10 executions
+    if (count >= 10) return TaskSchedule.stop();
+    
+    return TaskSchedule.seconds(1);
+}, ExecutionType.TICK_START);
+```
+
+### Tick-Based Countdown
+
+```java
+AtomicInteger countdown = new AtomicInteger(10);
+scheduler.submitTask(() -> {
+    int remaining = countdown.getAndDecrement();
+    
+    if (remaining > 0) {
+        instance.sendMessage(Component.text(remaining + "..."));
+        return TaskSchedule.tick(20); // 1 second intervals
+    } else {
+        instance.sendMessage(Component.text("GO!"));
+        return TaskSchedule.stop();
+    }
+}, ExecutionType.TICK_START);
+```
+
+### Async Operation Integration
+
+```java
+CompletableFuture<PlayerData> dataFuture = loadPlayerDataAsync(uuid);
+
+scheduler.buildTask(() -> {
+    PlayerData data = dataFuture.join();
+    player.sendMessage("Welcome back, " + data.getName());
+})
+.delay(TaskSchedule.future(dataFuture))
+.schedule();
+```
+
+### Parked Task Pattern
+
+```java
+// Create a parked task
+Task respawnTask = scheduler.buildTask(() -> {
+    entity.teleport(spawnPoint);
+    entity.setHealth(entity.getMaxHealth());
+})
+.delay(TaskSchedule.park())
+.schedule();
+
+// Unpark when the player dies
+entity.eventNode().addListener(PlayerDeathEvent.class, event -> {
+    respawnTask.unpark();
+});
+```
+
+### Task Cancellation
+
+```java
+// Start a repeating task
+Task annoyingTask = scheduler.scheduleTask(() -> {
+    player.playSound(Sound.sound(SoundEvent.ENTITY_VILLAGER_AMBIENT, 
+                                  Sound.Source.MASTER, 1f, 1f));
+}, TaskSchedule.immediate(), TaskSchedule.seconds(1));
+
+// Cancel it after 10 seconds
+scheduler.buildTask(() -> {
+    annoyingTask.cancel();
+})
+.delay(TaskSchedule.seconds(10))
+.schedule();
+```
+
+### End-of-Tick Processing
+
+Execute cleanup logic at the end of a tick:
+
+```java
+scheduler.scheduleEndOfTick(() -> {
+    // All entity movements have been processed
+    // Safe to do collision detection or cleanup
+    instance.getEntities().forEach(entity -> {
+        checkAndHandleCollisions(entity);
+    });
+});
+```
+
+## Thread Safety
+
+<Warning>
+The scheduler's `process()`, `processTick()`, and `processTickEnd()` methods are **not thread-safe**. They should only be called from the server's main tick thread.
+</Warning>
+
+Tasks are executed in the caller thread by default. To execute tasks on different threads:
+
+```java
+ExecutorService executor = Executors.newCachedThreadPool();
+
+// Schedule on main thread, execute on another thread
+scheduler.scheduleNextTick(() -> {
+    executor.submit(() -> {
+        // Heavy computation on separate thread
+        ExpensiveData result = performExpensiveCalculation();
+        
+        // Schedule result handling back on main thread
+        scheduler.scheduleNextTick(() -> {
+            handleResult(result);
+        });
+    });
+});
+```
+
+## Best Practices
+
+1. **Use tick-based scheduling for game logic**: Use `TaskSchedule.tick()` for game mechanics that should be synchronized with the server tick rate.
+
+2. **Use duration-based scheduling for real-world time**: Use `TaskSchedule.duration()` for timeouts, announcements, or events based on wall-clock time.
+
+3. **Prefer entity/instance schedulers**: Use localized schedulers when tasks are tied to specific entities or instances for better organization and automatic cleanup.
+
+4. **Cancel tasks when done**: Always cancel repeating tasks when they're no longer needed to avoid memory leaks.
+
+5. **Handle exceptions gracefully**: Exceptions in tasks are caught and logged, but won't crash the server. However, the task that threw will be cancelled.
+
+6. **Avoid blocking operations**: Don't perform I/O or other blocking operations in scheduled tasks. Use `CompletableFuture` with `TaskSchedule.future()` instead.
+
+## Common Patterns
+
+### Delayed Entity Removal
+
+```java
+Entity entity = new ItemEntity(itemStack);
+instance.addEntity(entity, position);
+
+// Remove after 5 minutes
+entity.scheduler().buildTask(() -> {
+    entity.remove();
+})
+.delay(TaskSchedule.minutes(5))
+.schedule();
+```
+
+### Periodic Autosave
+
+```java
+scheduler.scheduleTask(() -> {
+    saveAllPlayerData();
+    System.out.println("Autosave complete");
+}, TaskSchedule.minutes(5), TaskSchedule.minutes(5));
+```
+
+### Timeout Handler
+
+```java
+Task timeoutTask = scheduler.buildTask(() -> {
+    player.kick(Component.text("AFK timeout"));
+})
+.delay(TaskSchedule.minutes(10))
+.schedule();
+
+// Cancel timeout on player activity
+player.eventNode().addListener(PlayerMoveEvent.class, event -> {
+    timeoutTask.cancel();
+    // Create a new timeout task
+});
+```

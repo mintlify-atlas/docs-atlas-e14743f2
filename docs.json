@@ -50,6 +50,7 @@
             "pages": [
               "guides/entities",
               "guides/blocks",
+              "guides/items",
               "guides/commands",
               "guides/inventories",
               "guides/networking",
@@ -92,7 +93,8 @@
             "pages": [
               "api/coordinates",
               "api/tags",
-              "api/registry"
+              "api/registry",
+              "api/scheduler"
             ]
           }
         ]
