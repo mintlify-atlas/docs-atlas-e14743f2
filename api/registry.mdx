@@ -1,0 +1,596 @@
+---
+title: Registry
+description: Register and manage custom game content with Minestom's registry system
+icon: list
+---
+
+Minestom's registry system manages both static (vanilla) and dynamic (custom) game content like biomes, dimensions, enchantments, and more. Registries provide a centralized way to store and reference game data.
+
+## Overview
+
+Registries in Minestom come in two flavors:
+
+<CardGroup cols={2}>
+  <Card title="Static Registries" icon="lock">
+    Immutable registries for vanilla content (blocks, items, entities, fluids)
+  </Card>
+  <Card title="Dynamic Registries" icon="wrench">
+    Mutable registries for custom content (biomes, dimensions, enchantments)
+  </Card>
+</CardGroup>
+
+<Note>
+  Use `RegistryKey<T>` to reference registry entries rather than storing the objects directly. This ensures proper network synchronization and serialization.
+</Note>
+
+---
+
+## Accessing Registries
+
+All registries are accessed through the `Registries` interface, typically from `MinecraftServer` or `ServerProcess`.
+
+### Static Registries
+
+Static registries contain vanilla Minecraft content and cannot be modified.
+
+<CodeGroup>
+```java From MinecraftServer
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.instance.block.Block;
+import net.minestom.server.item.Material;
+
+// Get static registries
+Registry<Block> blocks = MinecraftServer.getBlockRegistry();
+Registry<Material> materials = MinecraftServer.getMaterialRegistry();
+Registry<EntityType> entityTypes = MinecraftServer.getEntityTypeRegistry();
+Registry<Fluid> fluids = MinecraftServer.getFluidRegistry();
+```
+
+```java From Registries Interface
+Registries registries = MinecraftServer.process();
+
+// Static registries
+Registry<Block> blocks = registries.blocks();
+Registry<Material> materials = registries.material();
+Registry<PotionEffect> potions = registries.potionEffect();
+Registry<EntityType> entities = registries.entityType();
+Registry<Fluid> fluids = registries.fluid();
+Registry<GameEvent> gameEvents = registries.gameEvent();
+```
+</CodeGroup>
+
+### Dynamic Registries
+
+Dynamic registries allow registration of custom content.
+
+<CodeGroup>
+```java Common Dynamic Registries
+Registries registries = MinecraftServer.process();
+
+// World registries
+DynamicRegistry<Biome> biomes = registries.biome();
+DynamicRegistry<DimensionType> dimensions = registries.dimensionType();
+
+// Item registries
+DynamicRegistry<Enchantment> enchantments = registries.enchantment();
+DynamicRegistry<TrimMaterial> trimMaterials = registries.trimMaterial();
+DynamicRegistry<TrimPattern> trimPatterns = registries.trimPattern();
+```
+
+```java Other Dynamic Registries
+// Entity registries
+DynamicRegistry<DamageType> damageTypes = registries.damageType();
+DynamicRegistry<PaintingVariant> paintings = registries.paintingVariant();
+
+// Variant registries
+DynamicRegistry<WolfVariant> wolfVariants = registries.wolfVariant();
+DynamicRegistry<CatVariant> catVariants = registries.catVariant();
+
+// Misc registries
+DynamicRegistry<ChatType> chatTypes = registries.chatType();
+DynamicRegistry<BannerPattern> banners = registries.bannerPattern();
+DynamicRegistry<JukeboxSong> songs = registries.jukeboxSong();
+```
+</CodeGroup>
+
+---
+
+## RegistryKey
+
+A `RegistryKey<T>` is a reference to a registry entry, containing the entry's namespaced key.
+
+### Creating Registry Keys
+
+<CodeGroup>
+```java From Registration
+// Register returns a RegistryKey
+Biome customBiome = Biome.builder()
+    .temperature(0.8f)
+    .downfall(0.4f)
+    .build();
+
+RegistryKey<Biome> biomeKey = 
+    MinecraftServer.getBiomeRegistry().register("myplugin:desert", customBiome);
+```
+
+```java Unsafe Creation
+import net.kyori.adventure.key.Key;
+
+// Create key without validation (use with caution)
+RegistryKey<Biome> vanillaPlains = 
+    RegistryKey.unsafeOf("minecraft:plains");
+
+RegistryKey<Biome> customKey = 
+    RegistryKey.unsafeOf(Key.key("myplugin", "desert"));
+```
+</CodeGroup>
+
+### Using Registry Keys
+
+<ParamField path="key()" type="Key">
+  Gets the namespaced key
+  
+  ```java
+  Key key = registryKey.key();
+  String namespace = key.namespace(); // "minecraft" or "myplugin"
+  String value = key.value();         // "plains", "desert", etc.
+  ```
+</ParamField>
+
+<ParamField path="name()" type="String">
+  Gets the full key as a string
+  
+  ```java
+  String name = biomeKey.name(); // "myplugin:desert"
+  ```
+</ParamField>
+
+---
+
+## DynamicRegistry
+
+Dynamic registries support registration, modification, and removal of entries.
+
+### Registration
+
+<ParamField path="register(id, object)" type="RegistryKey<T>">
+  Registers a new entry with a string ID
+  
+  ```java
+  DynamicRegistry<Biome> biomes = MinecraftServer.getBiomeRegistry();
+  
+  Biome customBiome = Biome.builder()
+      .temperature(0.5f)
+      .downfall(0.5f)
+      .build();
+  
+  RegistryKey<Biome> key = biomes.register("myplugin:custom", customBiome);
+  ```
+</ParamField>
+
+<ParamField path="register(key, object)" type="RegistryKey<T>">
+  Registers a new entry with a Key
+  
+  ```java
+  import net.kyori.adventure.key.Key;
+  
+  RegistryKey<Biome> key = biomes.register(
+      Key.key("myplugin", "custom"),
+      customBiome
+  );
+  ```
+</ParamField>
+
+<Note>
+  **Overwriting entries is unsafe** and disabled by default. To enable, set the system property `minestom.registry.unsafe-ops=true`. Overwriting can cause desync with existing structures.
+</Note>
+
+### Removal
+
+<ParamField path="remove(key)" type="boolean">
+  Removes an entry from the registry
+  
+  ```java
+  boolean removed = biomes.remove(Key.key("myplugin:custom"));
+  ```
+</ParamField>
+
+<Warning>
+  **Removal is dangerous!** It remaps all subsequent IDs, which can corrupt existing worlds. Requires `minestom.registry.unsafe-ops=true`.
+</Warning>
+
+### Querying
+
+<ParamField path="get(key)" type="T">
+  Gets an entry by key
+  
+  ```java
+  Biome plains = biomes.get(Key.key("minecraft:plains"));
+  ```
+</ParamField>
+
+<ParamField path="getId(key)" type="int">
+  Gets the protocol ID for an entry
+  
+  ```java
+  int id = biomes.getId(biomeKey);
+  ```
+</ParamField>
+
+<ParamField path="getKey(id)" type="Key">
+  Gets the key for a protocol ID
+  
+  ```java
+  Key key = biomes.getKey(10); // Returns key for ID 10
+  ```
+</ParamField>
+
+<ParamField path="values()" type="Collection<T>">
+  Gets all registered entries
+  
+  ```java
+  for (Biome biome : biomes.values()) {
+      // Process each biome
+  }
+  ```
+</ParamField>
+
+---
+
+## Registry Operations
+
+Both static and dynamic registries support these operations:
+
+<ParamField path="get(key)" type="T">
+  Gets entry by namespaced key
+  
+  ```java
+  Block stone = blocks.get(Key.key("minecraft:stone"));
+  ```
+</ParamField>
+
+<ParamField path="get(namespace, value)" type="T">
+  Gets entry by namespace and value
+  
+  ```java
+  Block stone = blocks.get("minecraft", "stone");
+  ```
+</ParamField>
+
+<ParamField path="getId(key)" type="int">
+  Gets protocol ID for a key
+</ParamField>
+
+<ParamField path="getName(id)" type="String">
+  Gets namespaced name for an ID
+  
+  ```java
+  String name = blocks.getName(1); // "minecraft:stone"
+  ```
+</ParamField>
+
+<ParamField path="values()" type="Collection<T>">
+  Gets all entries in the registry
+</ParamField>
+
+<ParamField path="size()" type="int">
+  Gets the number of registered entries
+  
+  ```java
+  int count = biomes.size();
+  ```
+</ParamField>
+
+---
+
+## Practical Examples
+
+<CodeGroup>
+```java Custom Biome
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.registry.DynamicRegistry;
+import net.minestom.server.registry.RegistryKey;
+import net.minestom.server.world.biome.Biome;
+import net.kyori.adventure.key.Key;
+
+public class CustomBiomes {
+    public static final RegistryKey<Biome> VOLCANIC;
+    
+    static {
+        DynamicRegistry<Biome> registry = MinecraftServer.getBiomeRegistry();
+        
+        Biome volcanic = Biome.builder()
+            .temperature(2.0f)  // Very hot
+            .downfall(0.0f)     // No rain
+            .effects(Biome.BiomeEffects.builder()
+                .fogColor(0x603020)
+                .skyColor(0x800000)
+                .waterColor(0xFF3300)
+                .build())
+            .build();
+        
+        VOLCANIC = registry.register("myplugin:volcanic", volcanic);
+    }
+    
+    public static void applyToChunk(Instance instance, int chunkX, int chunkZ) {
+        Chunk chunk = instance.getChunk(chunkX, chunkZ);
+        if (chunk != null) {
+            // Set biome for entire chunk
+            chunk.setBiome(0, 0, 0, VOLCANIC);
+        }
+    }
+}
+```
+
+```java Custom Dimension
+import net.minestom.server.world.DimensionType;
+
+public class CustomDimensions {
+    public static final RegistryKey<DimensionType> VOID_WORLD;
+    
+    static {
+        DynamicRegistry<DimensionType> registry = 
+            MinecraftServer.getDimensionTypeRegistry();
+        
+        DimensionType voidDimension = DimensionType.builder()
+            .ambientLight(0.0f)              // Completely dark
+            .ceilingEnabled(false)            // No bedrock ceiling
+            .skylightEnabled(true)            // Has skylight
+            .height(256)                      // World height
+            .minY(-64)                        // Minimum Y
+            .logicalHeight(256)               // Logical height
+            .infiniburn(Key.key("minecraft:infiniburn_overworld"))
+            .effects(Key.key("minecraft:overworld"))
+            .build();
+        
+        VOID_WORLD = registry.register("myplugin:void", voidDimension);
+    }
+    
+    public static Instance createVoidInstance() {
+        InstanceManager manager = MinecraftServer.getInstanceManager();
+        return manager.createInstanceContainer(VOID_WORLD);
+    }
+}
+```
+
+```java Custom Enchantment
+import net.minestom.server.item.enchant.Enchantment;
+
+public class CustomEnchantments {
+    public static final RegistryKey<Enchantment> EXPLOSIVE;
+    
+    static {
+        DynamicRegistry<Enchantment> registry = 
+            MinecraftServer.getEnchantmentRegistry();
+        
+        // Note: This is simplified. Real enchantments require
+        // complex effect definitions
+        Enchantment explosive = Enchantment.builder()
+            .maxLevel(3)
+            // Add effects, costs, etc.
+            .build();
+        
+        EXPLOSIVE = registry.register("myplugin:explosive", explosive);
+    }
+    
+    public static ItemStack createExplosiveSword() {
+        ItemStack sword = ItemStack.of(Material.DIAMOND_SWORD);
+        sword = sword.withMeta(meta -> {
+            meta.enchantment(EXPLOSIVE, 2);
+        });
+        return sword;
+    }
+}
+```
+
+```java Registry Lookup Utility
+import net.kyori.adventure.key.Key;
+
+public class RegistryHelper {
+    public static <T> T getOrDefault(
+            Registry<T> registry, 
+            String key, 
+            T defaultValue
+    ) {
+        T value = registry.get(Key.key(key));
+        return value != null ? value : defaultValue;
+    }
+    
+    public static <T> boolean exists(Registry<T> registry, String key) {
+        return registry.get(Key.key(key)) != null;
+    }
+    
+    public static <T> List<T> getAllByNamespace(
+            Registry<T> registry, 
+            String namespace
+    ) {
+        return registry.values().stream()
+            .filter(entry -> {
+                // Filter by checking if key starts with namespace
+                String name = registry.getName(registry.getId(entry));
+                return name.startsWith(namespace + ":");
+            })
+            .collect(Collectors.toList());
+    }
+    
+    // Example usage
+    public static void listCustomBiomes() {
+        DynamicRegistry<Biome> biomes = MinecraftServer.getBiomeRegistry();
+        List<Biome> custom = getAllByNamespace(biomes, "myplugin");
+        
+        System.out.println("Custom biomes: " + custom.size());
+        for (Biome biome : custom) {
+            int id = biomes.getId(biome);
+            String name = biomes.getName(id);
+            System.out.println(" - " + name);
+        }
+    }
+}
+```
+
+```java Configuration Phase Registry Updates
+import net.minestom.server.entity.Player;
+
+public class RegistryUpdateManager {
+    /**
+     * After modifying a registry, players must be sent to configuration
+     * phase to receive the updated registry data.
+     */
+    public static void updateBiomeAndRefreshPlayers(Biome newBiome) {
+        DynamicRegistry<Biome> biomes = MinecraftServer.getBiomeRegistry();
+        RegistryKey<Biome> key = biomes.register("myplugin:new_biome", newBiome);
+        
+        // Send all online players to configuration phase
+        for (Player player : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+            player.startConfigurationPhase();
+        }
+    }
+    
+    /**
+     * Batch register multiple entries before refreshing players
+     */
+    public static void batchRegisterBiomes(Map<String, Biome> biomesToAdd) {
+        DynamicRegistry<Biome> biomes = MinecraftServer.getBiomeRegistry();
+        
+        // Register all biomes
+        for (Map.Entry<String, Biome> entry : biomesToAdd.entrySet()) {
+            biomes.register(entry.getKey(), entry.getValue());
+        }
+        
+        // Refresh players once
+        for (Player player : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+            player.startConfigurationPhase();
+        }
+    }
+}
+```
+</CodeGroup>
+
+---
+
+## Static Registry Reference
+
+### Available Static Registries
+
+<ResponseField name="blocks()" type="Registry<Block>">
+  All block types (stone, dirt, etc.)
+</ResponseField>
+
+<ResponseField name="material()" type="Registry<Material>">
+  All item materials (diamond_sword, apple, etc.)
+</ResponseField>
+
+<ResponseField name="potionEffect()" type="Registry<PotionEffect>">
+  All potion effects (speed, strength, etc.)
+</ResponseField>
+
+<ResponseField name="entityType()" type="Registry<EntityType>">
+  All entity types (zombie, creeper, etc.)
+</ResponseField>
+
+<ResponseField name="fluid()" type="Registry<Fluid>">
+  All fluid types (water, lava)
+</ResponseField>
+
+<ResponseField name="gameEvent()" type="Registry<GameEvent>">
+  All game events for sculk sensors
+</ResponseField>
+
+---
+
+## Dynamic Registry Reference
+
+### Available Dynamic Registries
+
+<ResponseField name="biome()" type="DynamicRegistry<Biome>">
+  World biomes (plains, desert, etc.)
+</ResponseField>
+
+<ResponseField name="dimensionType()" type="DynamicRegistry<DimensionType>">
+  Dimension configurations (overworld, nether, end)
+</ResponseField>
+
+<ResponseField name="enchantment()" type="DynamicRegistry<Enchantment>">
+  Item enchantments
+</ResponseField>
+
+<ResponseField name="damageType()" type="DynamicRegistry<DamageType>">
+  Damage source types
+</ResponseField>
+
+<ResponseField name="trimMaterial()" type="DynamicRegistry<TrimMaterial>">
+  Armor trim materials
+</ResponseField>
+
+<ResponseField name="trimPattern()" type="DynamicRegistry<TrimPattern>">
+  Armor trim patterns
+</ResponseField>
+
+<ResponseField name="bannerPattern()" type="DynamicRegistry<BannerPattern>">
+  Banner patterns
+</ResponseField>
+
+<ResponseField name="paintingVariant()" type="DynamicRegistry<PaintingVariant>">
+  Painting variants
+</ResponseField>
+
+<ResponseField name="jukeboxSong()" type="DynamicRegistry<JukeboxSong>">
+  Music disc songs
+</ResponseField>
+
+<ResponseField name="chatType()" type="DynamicRegistry<ChatType>">
+  Chat message formatting
+</ResponseField>
+
+---
+
+## Best Practices
+
+<Note>
+  **Store RegistryKeys, not objects**: Always store `RegistryKey<T>` instead of the actual object. This ensures proper serialization and network sync.
+  
+  ```java
+  // Good
+  private RegistryKey<Biome> biomeKey;
+  
+  // Bad
+  private Biome biome;
+  ```
+</Note>
+
+<Note>
+  **Register early**: Register all custom content during server initialization, before any instances are created.
+  
+  ```java
+  public class MyPlugin {
+      public void onEnable() {
+          // Register custom content first
+          CustomBiomes.init();
+          CustomDimensions.init();
+          
+          // Then create instances
+          createGameWorld();
+      }
+  }
+  ```
+</Note>
+
+<Note>
+  **Use namespaced keys**: Always prefix custom content with your plugin/mod namespace to avoid conflicts.
+  
+  ```java
+  // Good
+  registry.register("myplugin:custom_biome", biome);
+  
+  // Bad (might conflict with other plugins)
+  registry.register("custom_biome", biome);
+  ```
+</Note>
+
+<Warning>
+  **Avoid runtime modifications**: Modifying registries after server start requires sending players to configuration phase. This interrupts gameplay and should be avoided.
+</Warning>
+
+<Note>
+  **Don't enable unsafe operations**: The `minestom.registry.unsafe-ops` flag is dangerous and can corrupt worlds. Only use it in development environments.
+</Note>

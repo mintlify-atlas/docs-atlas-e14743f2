@@ -1,0 +1,430 @@
+---
+title: 'Inventories'
+description: 'Create and manage inventories, handle item interactions, and implement custom GUIs'
+---
+
+Inventories in Minestom allow you to create custom GUIs, manage player items, and handle item interactions.
+
+## Inventory Types
+
+Minestom provides various inventory types matching Minecraft's container types.
+
+### Available Inventory Types
+
+```java
+import net.minestom.server.inventory.Inventory;
+import net.minestom.server.inventory.InventoryType;
+import net.kyori.adventure.text.Component;
+
+// Chest inventories (9-54 slots)
+Inventory chest = new Inventory(InventoryType.CHEST_1_ROW, Component.text("Small Chest"));
+Inventory largeChest = new Inventory(InventoryType.CHEST_6_ROWS, Component.text("Large Chest"));
+
+// Other container types
+Inventory furnace = new Inventory(InventoryType.FURNACE, Component.text("Furnace"));
+Inventory crafting = new Inventory(InventoryType.CRAFTING, Component.text("Crafting Table"));
+Inventory hopper = new Inventory(InventoryType.HOPPER, Component.text("Hopper"));
+Inventory anvil = new Inventory(InventoryType.ANVIL, Component.text("Anvil"));
+Inventory beacon = new Inventory(InventoryType.BEACON, Component.text("Beacon"));
+```
+
+### Creating Inventories
+
+```java
+// With Component title
+Inventory inventory = new Inventory(
+    InventoryType.CHEST_3_ROWS, 
+    Component.text("My Inventory")
+);
+
+// With String title (auto-converted to Component)
+Inventory simpleInventory = new Inventory(
+    InventoryType.CHEST_1_ROW,
+    "Simple Inventory"
+);
+```
+
+## Managing Items
+
+### Setting Items
+
+```java
+import net.minestom.server.item.ItemStack;
+import net.minestom.server.item.Material;
+
+// Set item at specific slot
+inventory.setItemStack(0, ItemStack.of(Material.DIAMOND, 64));
+
+// Set multiple items
+inventory.setItemStack(1, ItemStack.of(Material.EMERALD, 32));
+inventory.setItemStack(2, ItemStack.of(Material.GOLD_INGOT, 16));
+
+// Clear slot
+inventory.setItemStack(3, ItemStack.AIR);
+```
+
+### Getting Items
+
+```java
+// Get item at slot
+ItemStack item = inventory.getItemStack(0);
+
+// Check if slot is empty
+if (item.isAir()) {
+    System.out.println("Slot is empty");
+}
+
+// Get all items
+ItemStack[] items = inventory.getItemStacks();
+```
+
+### Adding Items
+
+```java
+// Try to add item to inventory
+boolean added = inventory.addItemStack(ItemStack.of(Material.DIAMOND));
+
+if (!added) {
+    player.sendMessage(Component.text("Inventory full!"));
+}
+```
+
+## Opening Inventories
+
+### For Players
+
+```java
+import net.minestom.server.entity.Player;
+
+// Open inventory for player
+player.openInventory(inventory);
+
+// Close player's current inventory
+player.closeInventory();
+
+// Check current inventory
+Inventory current = player.getOpenInventory();
+if (current != null) {
+    System.out.println("Player has inventory open");
+}
+```
+
+### Inventory Viewers
+
+```java
+// Get all viewers
+Set<Player> viewers = inventory.getViewers();
+
+// Check if player is viewing
+if (inventory.getViewers().contains(player)) {
+    System.out.println("Player is viewing inventory");
+}
+
+// Send message to all viewers
+for (Player viewer : inventory.getViewers()) {
+    viewer.sendMessage(Component.text("Inventory updated!"));
+}
+```
+
+## Inventory Events
+
+### Click Events
+
+```java
+import net.minestom.server.event.inventory.InventoryPreClickEvent;
+import net.minestom.server.inventory.click.ClickType;
+
+eventNode.addListener(InventoryPreClickEvent.class, event -> {
+    Player player = event.getPlayer();
+    Inventory inventory = event.getInventory();
+    int slot = event.getSlot();
+    ClickType clickType = event.getClickType();
+    ItemStack clicked = event.getClickedItem();
+    ItemStack cursor = event.getCursorItem();
+    
+    // Cancel click
+    if (clicked.material() == Material.DIAMOND) {
+        event.setCancelled(true);
+        player.sendMessage(Component.text("You can't take this!"));
+        return;
+    }
+    
+    // Log click
+    System.out.println("Slot " + slot + " clicked with " + clickType);
+});
+```
+
+### Open and Close Events
+
+```java
+import net.minestom.server.event.inventory.InventoryOpenEvent;
+import net.minestom.server.event.inventory.InventoryCloseEvent;
+
+// Inventory opened
+eventNode.addListener(InventoryOpenEvent.class, event -> {
+    Player player = event.getPlayer();
+    Inventory inventory = event.getInventory();
+    
+    player.sendMessage(Component.text("Welcome to the shop!"));
+});
+
+// Inventory closed
+eventNode.addListener(InventoryCloseEvent.class, event -> {
+    Player player = event.getPlayer();
+    Inventory inventory = event.getInventory();
+    
+    // Clean up or save data
+    System.out.println(player.getUsername() + " closed inventory");
+});
+```
+
+## Player Inventory
+
+Every player has a `PlayerInventory` for their personal items.
+
+### Accessing Player Inventory
+
+```java
+import net.minestom.server.inventory.PlayerInventory;
+
+PlayerInventory inventory = player.getInventory();
+
+// Add items
+inventory.addItemStack(ItemStack.of(Material.STONE, 64));
+
+// Set hotbar slot
+inventory.setItemStack(0, ItemStack.of(Material.DIAMOND_SWORD));
+
+// Set armor
+inventory.setHelmet(ItemStack.of(Material.DIAMOND_HELMET));
+inventory.setChestplate(ItemStack.of(Material.DIAMOND_CHESTPLATE));
+inventory.setLeggings(ItemStack.of(Material.DIAMOND_LEGGINGS));
+inventory.setBoots(ItemStack.of(Material.DIAMOND_BOOTS));
+
+// Set offhand
+inventory.setItemInOffHand(ItemStack.of(Material.SHIELD));
+```
+
+### Cursor Item
+
+```java
+// Get item on cursor
+ItemStack cursor = inventory.getCursorItem();
+
+// Set cursor item
+inventory.setCursorItem(ItemStack.of(Material.DIAMOND));
+```
+
+## Custom Inventory GUIs
+
+### Simple Shop Example
+
+```java
+public class ShopInventory {
+    
+    public static Inventory createShop() {
+        Inventory shop = new Inventory(
+            InventoryType.CHEST_3_ROWS,
+            Component.text("Shop", NamedTextColor.GOLD)
+        );
+        
+        // Add items for sale
+        shop.setItemStack(10, ItemStack.builder(Material.DIAMOND_SWORD)
+            .set(DataComponents.CUSTOM_NAME, Component.text("Legendary Sword"))
+            .set(DataComponents.LORE, List.of(
+                Component.text("Price: 100 Gold", NamedTextColor.YELLOW)
+            ))
+            .build());
+        
+        shop.setItemStack(12, ItemStack.builder(Material.DIAMOND_HELMET)
+            .set(DataComponents.CUSTOM_NAME, Component.text("Hero's Helmet"))
+            .set(DataComponents.LORE, List.of(
+                Component.text("Price: 75 Gold", NamedTextColor.YELLOW)
+            ))
+            .build());
+        
+        shop.setItemStack(14, ItemStack.builder(Material.GOLDEN_APPLE)
+            .amount(5)
+            .set(DataComponents.CUSTOM_NAME, Component.text("Golden Apples x5"))
+            .set(DataComponents.LORE, List.of(
+                Component.text("Price: 50 Gold", NamedTextColor.YELLOW)
+            ))
+            .build());
+        
+        return shop;
+    }
+    
+    public static void setupShopHandlers(EventNode<Event> eventNode) {
+        eventNode.addListener(InventoryPreClickEvent.class, event -> {
+            if (event.getInventory() == null) return;
+            
+            Component title = event.getInventory().getTitle();
+            if (!PlainTextComponentSerializer.plainText().serialize(title).equals("Shop")) {
+                return;
+            }
+            
+            // Cancel all clicks in shop
+            event.setCancelled(true);
+            
+            Player player = event.getPlayer();
+            ItemStack clicked = event.getClickedItem();
+            
+            if (clicked.isAir()) return;
+            
+            // Handle purchase
+            player.sendMessage(Component.text("You purchased: ")
+                .append(clicked.get(DataComponents.CUSTOM_NAME)));
+            
+            player.closeInventory();
+        });
+    }
+}
+```
+
+### Paginated Inventory
+
+```java
+public class PaginatedInventory {
+    private final List<ItemStack> items;
+    private int page = 0;
+    private final Inventory inventory;
+    
+    public PaginatedInventory(List<ItemStack> items) {
+        this.items = items;
+        this.inventory = new Inventory(
+            InventoryType.CHEST_6_ROWS,
+            Component.text("Items - Page 1")
+        );
+        updatePage();
+    }
+    
+    private void updatePage() {
+        // Clear inventory
+        for (int i = 0; i < 45; i++) {
+            inventory.setItemStack(i, ItemStack.AIR);
+        }
+        
+        // Add items for current page (45 items per page)
+        int start = page * 45;
+        int end = Math.min(start + 45, items.size());
+        
+        for (int i = start; i < end; i++) {
+            inventory.setItemStack(i - start, items.get(i));
+        }
+        
+        // Navigation buttons
+        if (page > 0) {
+            inventory.setItemStack(45, ItemStack.builder(Material.ARROW)
+                .set(DataComponents.CUSTOM_NAME, Component.text("Previous Page"))
+                .build());
+        }
+        
+        if (end < items.size()) {
+            inventory.setItemStack(53, ItemStack.builder(Material.ARROW)
+                .set(DataComponents.CUSTOM_NAME, Component.text("Next Page"))
+                .build());
+        }
+        
+        // Update title
+        inventory.setTitle(Component.text("Items - Page " + (page + 1)));
+    }
+    
+    public void nextPage() {
+        if ((page + 1) * 45 < items.size()) {
+            page++;
+            updatePage();
+        }
+    }
+    
+    public void previousPage() {
+        if (page > 0) {
+            page--;
+            updatePage();
+        }
+    }
+    
+    public Inventory getInventory() {
+        return inventory;
+    }
+}
+```
+
+## Inventory Properties
+
+Some inventory types have special properties:
+
+```java
+// Window properties (for furnaces, brewing stands, etc.)
+inventory.sendProperty(InventoryProperty.FURNACE_FIRE_ICON, (short) 200);
+inventory.sendProperty(InventoryProperty.FURNACE_MAXIMUM_FUEL_BURN_TIME, (short) 200);
+```
+
+## Complete Example: Block Interaction
+
+Open inventory when player clicks a crafting table:
+
+```java
+import net.minestom.server.event.player.PlayerBlockInteractEvent;
+
+eventNode.addListener(PlayerBlockInteractEvent.class, event -> {
+    Block block = event.getBlock();
+    
+    if (block.id() == Block.CRAFTING_TABLE.id()) {
+        Player player = event.getPlayer();
+        
+        Inventory crafting = new Inventory(
+            InventoryType.CRAFTING,
+            Component.text("Crafting")
+        );
+        
+        player.openInventory(crafting);
+    }
+});
+```
+
+## Item Drop and Pickup
+
+Handle item drops and pickups:
+
+```java
+import net.minestom.server.event.item.ItemDropEvent;
+import net.minestom.server.event.item.PickupItemEvent;
+import net.minestom.server.entity.ItemEntity;
+
+// Item drop
+eventNode.addListener(ItemDropEvent.class, event -> {
+    Player player = event.getPlayer();
+    ItemStack droppedItem = event.getItemStack();
+    
+    Pos playerPos = player.getPosition();
+    ItemEntity itemEntity = new ItemEntity(droppedItem);
+    itemEntity.setPickupDelay(Duration.of(500, TimeUnit.MILLISECOND));
+    itemEntity.setInstance(player.getInstance(), playerPos.withY(y -> y + 1.5));
+    
+    Vec velocity = playerPos.direction().mul(6);
+    itemEntity.setVelocity(velocity);
+});
+
+// Item pickup
+eventNode.addListener(PickupItemEvent.class, event -> {
+    Entity entity = event.getLivingEntity();
+    
+    if (entity instanceof Player player) {
+        ItemStack itemStack = event.getItemEntity().getItemStack();
+        
+        // Cancel if inventory is full
+        event.setCancelled(!player.getInventory().addItemStack(itemStack));
+    }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Commands" icon="terminal" href="/guides/commands">
+    Create commands to give items and manage inventories
+  </Card>
+  <Card title="Entities" icon="dragon" href="/guides/entities">
+    Learn about entity equipment and items
+  </Card>
+</CardGroup>

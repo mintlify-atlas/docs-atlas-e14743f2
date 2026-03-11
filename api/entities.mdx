@@ -1,0 +1,896 @@
+---
+title: 'Entities'
+description: 'Entity, Player, and LivingEntity API for managing game entities'
+icon: 'users'
+---
+
+## Overview
+
+Entities represent all moving objects in Minestom including players, mobs, items, and projectiles.
+
+---
+
+## Entity Class
+
+Base class for all entities in the game.
+
+### Entity Creation
+
+<ParamField path="Entity(EntityType)" type="constructor">
+  Creates a new entity with a random UUID.
+  
+  **Parameters:**
+  - `entityType` - The type of entity to create
+  
+  ```java
+  Entity zombie = new EntityCreature(EntityType.ZOMBIE);
+  ```
+</ParamField>
+
+<ParamField path="Entity(EntityType, UUID)" type="constructor">
+  Creates an entity with a specific UUID.
+  
+  **Parameters:**
+  - `entityType` - The entity type
+  - `uuid` - The entity UUID
+</ParamField>
+
+### Spawning & Despawning
+
+<ParamField path="setInstance(Instance, Pos)" type="CompletableFuture<Void>">
+  Spawns the entity in an instance at the specified position.
+  
+  **Parameters:**
+  - `instance` - The instance to spawn in
+  - `spawnPosition` - The spawn position
+  
+  **Returns:** Future completed when entity is spawned
+  
+  **Throws:** IllegalStateException if instance is not registered
+  
+  ```java
+  Entity entity = new EntityCreature(EntityType.ZOMBIE);
+  entity.setInstance(instance, new Pos(0, 42, 0)).thenRun(() -> {
+      System.out.println("Entity spawned!");
+  });
+  ```
+</ParamField>
+
+<ParamField path="setInstance(Instance)" type="CompletableFuture<Void>">
+  Changes the entity's instance, keeping current position.
+  
+  **Parameters:**
+  - `instance` - The new instance
+  
+  **Returns:** Future completed when transfer is done
+</ParamField>
+
+<ParamField path="remove()" type="void">
+  Removes the entity temporarily (can respawn).
+  
+  ```java
+  entity.remove();
+  ```
+</ParamField>
+
+<ParamField path="remove(boolean)" type="void">
+  Removes the entity with optional permanent removal.
+  
+  **Parameters:**
+  - `permanent` - true for permanent removal
+</ParamField>
+
+### Position & Movement
+
+<ParamField path="teleport(Pos)" type="CompletableFuture<Void>">
+  Teleports the entity to a position.
+  
+  **Parameters:**
+  - `position` - The target position
+  
+  **Returns:** Future completed when teleport finishes
+  
+  ```java
+  entity.teleport(new Pos(10, 64, 10));
+  ```
+</ParamField>
+
+<ParamField path="teleport(Pos, Vec)" type="CompletableFuture<Void>">
+  Teleports with velocity.
+  
+  **Parameters:**
+  - `position` - Target position
+  - `velocity` - New velocity vector
+  
+  **Returns:** Future completed when teleport finishes
+</ParamField>
+
+<ParamField path="getPosition()" type="Pos">
+  Gets the current entity position.
+  
+  **Returns:** The entity position (includes yaw/pitch)
+  
+  ```java
+  Pos pos = entity.getPosition();
+  System.out.println("Entity at: " + pos.x() + ", " + pos.y() + ", " + pos.z());
+  ```
+</ParamField>
+
+<ParamField path="setVelocity(Vec)" type="void">
+  Sets the entity velocity and fires EntityVelocityEvent.
+  
+  **Parameters:**
+  - `velocity` - The velocity in blocks/second
+  
+  ```java
+  entity.setVelocity(new Vec(0, 10, 0)); // Launch upward
+  ```
+</ParamField>
+
+<ParamField path="getVelocity()" type="Vec">
+  Gets the entity velocity.
+  
+  **Returns:** Velocity vector in blocks/second
+</ParamField>
+
+<ParamField path="setView(float, float)" type="void">
+  Changes the entity's view direction.
+  
+  **Parameters:**
+  - `yaw` - Horizontal rotation
+  - `pitch` - Vertical rotation
+  
+  ```java
+  entity.setView(90f, 0f); // Face east
+  ```
+</ParamField>
+
+<ParamField path="lookAt(Point)" type="void">
+  Makes the entity look at a specific position.
+  
+  **Parameters:**
+  - `point` - The point to look at
+  
+  ```java
+  entity.lookAt(player.getPosition());
+  ```
+</ParamField>
+
+<ParamField path="lookAt(Entity)" type="void">
+  Makes the entity look at another entity.
+  
+  **Parameters:**
+  - `entity` - The entity to look at
+  
+  **Throws:** IllegalArgumentException if entities are in different instances
+</ParamField>
+
+### Entity Properties
+
+<ParamField path="getEntityId()" type="int">
+  Gets the unique entity ID (server-wide, changes on restart).
+  
+  **Returns:** The entity ID
+</ParamField>
+
+<ParamField path="getUuid()" type="UUID">
+  Gets the entity UUID.
+  
+  **Returns:** The entity UUID
+</ParamField>
+
+<ParamField path="getEntityType()" type="EntityType">
+  Gets the entity type.
+  
+  **Returns:** The EntityType
+  
+  ```java
+  if (entity.getEntityType() == EntityType.ZOMBIE) {
+      // Handle zombie
+  }
+  ```
+</ParamField>
+
+<ParamField path="getInstance()" type="Instance">
+  Gets the entity's current instance.
+  
+  **Returns:** The instance, or null if not spawned
+</ParamField>
+
+<ParamField path="getChunk()" type="Chunk">
+  Gets the chunk the entity is in.
+  
+  **Returns:** The current chunk, or null
+</ParamField>
+
+<ParamField path="isOnGround()" type="boolean">
+  Checks if the entity is on the ground.
+  
+  **Returns:** true if on ground
+</ParamField>
+
+<ParamField path="isRemoved()" type="boolean">
+  Checks if the entity has been removed.
+  
+  **Returns:** true if removed
+</ParamField>
+
+<ParamField path="isActive()" type="boolean">
+  Checks if the entity has been added to an instance.
+  
+  **Returns:** true if active (spawned)
+</ParamField>
+
+### Physics
+
+<ParamField path="hasPhysics()" type="boolean">
+  Checks if physics calculations are enabled.
+  
+  **Returns:** true if physics are enabled
+</ParamField>
+
+<ParamField path="setHasPhysics(boolean)" type="void">
+  Enables or disables physics calculations.
+  
+  **Parameters:**
+  - `hasPhysics` - true to enable physics
+  
+  ```java
+  entity.setHasPhysics(false); // Disable gravity/collisions
+  ```
+</ParamField>
+
+<ParamField path="hasNoGravity()" type="boolean">
+  Checks if the entity ignores gravity.
+  
+  **Returns:** true if gravity is disabled
+</ParamField>
+
+<ParamField path="setNoGravity(boolean)" type="void">
+  Sets whether the entity should ignore gravity.
+  
+  **Parameters:**
+  - `noGravity` - true to disable gravity
+</ParamField>
+
+<ParamField path="getBoundingBox()" type="BoundingBox">
+  Gets the entity's collision bounding box.
+  
+  **Returns:** The BoundingBox
+</ParamField>
+
+<ParamField path="setBoundingBox(double, double, double)" type="void">
+  Sets the entity bounding box dimensions.
+  
+  **Parameters:**
+  - `width` - Box width (X)
+  - `height` - Box height (Y)
+  - `depth` - Box depth (Z)
+</ParamField>
+
+### Passengers & Vehicles
+
+<ParamField path="addPassenger(Entity)" type="void">
+  Adds a passenger to this entity.
+  
+  **Parameters:**
+  - `entity` - The entity to add as passenger
+  
+  **Throws:** IllegalStateException if instance is null or entity is the vehicle
+  
+  ```java
+  Entity minecart = new Entity(EntityType.MINECART);
+  minecart.setInstance(instance, pos);
+  minecart.addPassenger(player);
+  ```
+</ParamField>
+
+<ParamField path="removePassenger(Entity)" type="void">
+  Removes a passenger.
+  
+  **Parameters:**
+  - `entity` - The passenger to remove
+</ParamField>
+
+<ParamField path="getPassengers()" type="Set<Entity>">
+  Gets all passengers.
+  
+  **Returns:** Unmodifiable set of passengers
+</ParamField>
+
+<ParamField path="getVehicle()" type="Entity">
+  Gets the entity this entity is riding.
+  
+  **Returns:** The vehicle entity, or null
+</ParamField>
+
+### Metadata & Visual
+
+<ParamField path="getEntityMeta()" type="EntityMeta">
+  Gets the entity metadata object for modification.
+  
+  **Returns:** The EntityMeta
+</ParamField>
+
+<ParamField path="isInvisible()" type="boolean">
+  Checks if the entity is invisible.
+  
+  **Returns:** true if invisible
+</ParamField>
+
+<ParamField path="setInvisible(boolean)" type="void">
+  Makes the entity invisible or visible.
+  
+  **Parameters:**
+  - `invisible` - true to make invisible
+</ParamField>
+
+<ParamField path="isGlowing()" type="boolean">
+  Checks if the entity has the glowing effect.
+  
+  **Returns:** true if glowing
+</ParamField>
+
+<ParamField path="setGlowing(boolean)" type="void">
+  Enables or disables the glowing effect.
+  
+  **Parameters:**
+  - `glowing` - true to make glow
+  
+  ```java
+  entity.setGlowing(true); // Entity glows through walls
+  ```
+</ParamField>
+
+<ParamField path="getPose()" type="EntityPose">
+  Gets the current entity pose.
+  
+  **Returns:** The EntityPose (STANDING, SNEAKING, SWIMMING, etc.)
+</ParamField>
+
+<ParamField path="setPose(EntityPose)" type="void">
+  Sets the entity pose.
+  
+  **Parameters:**
+  - `pose` - The new pose
+</ParamField>
+
+---
+
+## LivingEntity Class
+
+Extends Entity with health, equipment, and damage handling.
+
+### Health & Damage
+
+<ParamField path="getHealth()" type="float">
+  Gets the current health.
+  
+  **Returns:** Current health points
+</ParamField>
+
+<ParamField path="setHealth(float)" type="void">
+  Sets the entity health.
+  
+  **Parameters:**
+  - `health` - The new health value
+  
+  ```java
+  livingEntity.setHealth(20f); // Full health
+  ```
+</ParamField>
+
+<ParamField path="damage(Damage)" type="boolean">
+  Damages the entity.
+  
+  **Parameters:**
+  - `damage` - The damage source and amount
+  
+  **Returns:** true if damage was applied
+  
+  ```java
+  livingEntity.damage(Damage.fromPlayer(player, 5f));
+  ```
+</ParamField>
+
+<ParamField path="kill()" type="void">
+  Kills the entity, triggering the death event and animation.
+  
+  ```java
+  livingEntity.kill();
+  ```
+</ParamField>
+
+<ParamField path="isDead()" type="boolean">
+  Checks if the entity is dead.
+  
+  **Returns:** true if dead
+</ParamField>
+
+### Equipment
+
+<ParamField path="getItemInMainHand()" type="ItemStack">
+  Gets the item in the main hand.
+  
+  **Returns:** The ItemStack
+</ParamField>
+
+<ParamField path="setItemInMainHand(ItemStack)" type="void">
+  Sets the main hand item.
+  
+  **Parameters:**
+  - `itemStack` - The item to set
+  
+  ```java
+  livingEntity.setItemInMainHand(ItemStack.of(Material.DIAMOND_SWORD));
+  ```
+</ParamField>
+
+<ParamField path="getItemInOffHand()" type="ItemStack">
+  Gets the off-hand item.
+  
+  **Returns:** The ItemStack
+</ParamField>
+
+<ParamField path="setItemInOffHand(ItemStack)" type="void">
+  Sets the off-hand item.
+  
+  **Parameters:**
+  - `itemStack` - The item to set
+</ParamField>
+
+<ParamField path="getHelmet()" type="ItemStack">
+  Gets the helmet.
+  
+  **Returns:** The helmet ItemStack
+</ParamField>
+
+<ParamField path="setHelmet(ItemStack)" type="void">
+  Sets the helmet.
+  
+  **Parameters:**
+  - `itemStack` - The helmet item
+</ParamField>
+
+<ParamField path="getChestplate()" type="ItemStack">
+  Gets the chestplate.
+  
+  **Returns:** The chestplate ItemStack
+</ParamField>
+
+<ParamField path="setChestplate(ItemStack)" type="void">
+  Sets the chestplate.
+  
+  **Parameters:**
+  - `itemStack` - The chestplate item
+</ParamField>
+
+<ParamField path="getLeggings()" type="ItemStack">
+  Gets the leggings.
+  
+  **Returns:** The leggings ItemStack
+</ParamField>
+
+<ParamField path="setLeggings(ItemStack)" type="void">
+  Sets the leggings.
+  
+  **Parameters:**
+  - `itemStack` - The leggings item
+</ParamField>
+
+<ParamField path="getBoots()" type="ItemStack">
+  Gets the boots.
+  
+  **Returns:** The boots ItemStack
+</ParamField>
+
+<ParamField path="setBoots(ItemStack)" type="void">
+  Sets the boots.
+  
+  **Parameters:**
+  - `itemStack` - The boots item
+</ParamField>
+
+<ParamField path="getEquipment(EquipmentSlot)" type="ItemStack">
+  Gets equipment in a specific slot.
+  
+  **Parameters:**
+  - `slot` - The equipment slot
+  
+  **Returns:** The ItemStack in that slot
+</ParamField>
+
+<ParamField path="setEquipment(EquipmentSlot, ItemStack)" type="void">
+  Sets equipment in a specific slot.
+  
+  **Parameters:**
+  - `slot` - The equipment slot
+  - `itemStack` - The item to equip
+</ParamField>
+
+### Attributes
+
+<ParamField path="getAttribute(Attribute)" type="AttributeInstance">
+  Gets an attribute instance for modification.
+  
+  **Parameters:**
+  - `attribute` - The attribute to get
+  
+  **Returns:** The AttributeInstance
+  
+  ```java
+  AttributeInstance speed = livingEntity.getAttribute(Attribute.MOVEMENT_SPEED);
+  speed.setBaseValue(0.15); // Faster movement
+  ```
+</ParamField>
+
+<ParamField path="getAttributeValue(Attribute)" type="double">
+  Gets the current value of an attribute.
+  
+  **Parameters:**
+  - `attribute` - The attribute
+  
+  **Returns:** The attribute value
+</ParamField>
+
+### Fire & Effects
+
+<ParamField path="getFireTicks()" type="int">
+  Gets remaining fire ticks.
+  
+  **Returns:** Fire duration in ticks
+</ParamField>
+
+<ParamField path="setFireTicks(int)" type="void">
+  Sets the entity on fire.
+  
+  **Parameters:**
+  - `ticks` - Duration in ticks
+  
+  ```java
+  livingEntity.setFireTicks(100); // 5 seconds
+  ```
+</ParamField>
+
+<ParamField path="isInvulnerable()" type="boolean">
+  Checks if the entity is invulnerable.
+  
+  **Returns:** true if invulnerable
+</ParamField>
+
+<ParamField path="setInvulnerable(boolean)" type="void">
+  Makes the entity invulnerable or vulnerable.
+  
+  **Parameters:**
+  - `invulnerable` - true for invulnerability
+</ParamField>
+
+---
+
+## Player Class
+
+Extends LivingEntity with player-specific functionality.
+
+### Player Information
+
+<ParamField path="getUsername()" type="String">
+  Gets the player's username.
+  
+  **Returns:** The username
+</ParamField>
+
+<ParamField path="getDisplayName()" type="Component">
+  Gets the display name shown in tab list.
+  
+  **Returns:** Display name component, or null for username
+</ParamField>
+
+<ParamField path="setDisplayName(Component)" type="void">
+  Sets the tab list display name.
+  
+  **Parameters:**
+  - `displayName` - The display name (null for username)
+  
+  ```java
+  player.setDisplayName(Component.text("[Admin] ").append(Component.text(player.getUsername())));
+  ```
+</ParamField>
+
+<ParamField path="getSkin()" type="PlayerSkin">
+  Gets the player's skin.
+  
+  **Returns:** The PlayerSkin, or null for default
+</ParamField>
+
+<ParamField path="setSkin(PlayerSkin)" type="void">
+  Changes the player's skin (respawns player for all viewers).
+  
+  **Parameters:**
+  - `skin` - The new skin (null for UUID default)
+</ParamField>
+
+### Game Mode & Abilities
+
+<ParamField path="getGameMode()" type="GameMode">
+  Gets the player's game mode.
+  
+  **Returns:** The GameMode
+</ParamField>
+
+<ParamField path="setGameMode(GameMode)" type="void">
+  Sets the game mode.
+  
+  **Parameters:**
+  - `gameMode` - The new game mode
+  
+  ```java
+  player.setGameMode(GameMode.CREATIVE);
+  ```
+</ParamField>
+
+<ParamField path="isFlying()" type="boolean">
+  Checks if the player is flying.
+  
+  **Returns:** true if flying
+</ParamField>
+
+<ParamField path="setFlying(boolean)" type="void">
+  Sets the player flying state.
+  
+  **Parameters:**
+  - `flying` - true to make fly
+</ParamField>
+
+<ParamField path="isAllowFlying()" type="boolean">
+  Checks if the player can fly.
+  
+  **Returns:** true if flight is allowed
+</ParamField>
+
+<ParamField path="setAllowFlying(boolean)" type="void">
+  Allows or disallows flight.
+  
+  **Parameters:**
+  - `allowFlying` - true to allow flying
+  
+  ```java
+  player.setAllowFlying(true);
+  player.setFlying(true);
+  ```
+</ParamField>
+
+### Inventory
+
+<ParamField path="getInventory()" type="PlayerInventory">
+  Gets the player's inventory.
+  
+  **Returns:** The PlayerInventory
+  
+  ```java
+  player.getInventory().addItemStack(ItemStack.of(Material.DIAMOND, 64));
+  ```
+</ParamField>
+
+<ParamField path="openInventory(Inventory)" type="void">
+  Opens an inventory GUI for the player.
+  
+  **Parameters:**
+  - `inventory` - The inventory to open
+  
+  ```java
+  Inventory chest = new Inventory(InventoryType.CHEST_1_ROW, "My Chest");
+  player.openInventory(chest);
+  ```
+</ParamField>
+
+<ParamField path="closeInventory()" type="void">
+  Closes the currently open inventory.
+  
+  ```java
+  player.closeInventory();
+  ```
+</ParamField>
+
+<ParamField path="getOpenInventory()" type="Inventory">
+  Gets the currently open inventory.
+  
+  **Returns:** The open inventory, or null
+</ParamField>
+
+### Food & Experience
+
+<ParamField path="getFood()" type="int">
+  Gets the food level (0-20).
+  
+  **Returns:** Food level
+</ParamField>
+
+<ParamField path="setFood(int)" type="void">
+  Sets the food level.
+  
+  **Parameters:**
+  - `food` - Food level (0-20)
+  
+  ```java
+  player.setFood(20); // Full hunger
+  ```
+</ParamField>
+
+<ParamField path="getFoodSaturation()" type="float">
+  Gets food saturation.
+  
+  **Returns:** Saturation level
+</ParamField>
+
+<ParamField path="setFoodSaturation(float)" type="void">
+  Sets food saturation.
+  
+  **Parameters:**
+  - `foodSaturation` - Saturation (0-20)
+</ParamField>
+
+<ParamField path="getLevel()" type="int">
+  Gets the experience level.
+  
+  **Returns:** The level
+</ParamField>
+
+<ParamField path="setLevel(int)" type="void">
+  Sets the experience level.
+  
+  **Parameters:**
+  - `level` - The new level
+</ParamField>
+
+### Respawn
+
+<ParamField path="getRespawnPoint()" type="Pos">
+  Gets the respawn point.
+  
+  **Returns:** The respawn position
+</ParamField>
+
+<ParamField path="setRespawnPoint(Pos)" type="void">
+  Sets the respawn point.
+  
+  **Parameters:**
+  - `respawnPoint` - The new respawn position
+  
+  ```java
+  player.setRespawnPoint(new Pos(0, 64, 0));
+  ```
+</ParamField>
+
+<ParamField path="respawn()" type="void">
+  Respawns the player if dead.
+  
+  ```java
+  if (player.isDead()) {
+      player.respawn();
+  }
+  ```
+</ParamField>
+
+### Communication
+
+<ParamField path="sendMessage(Component)" type="void">
+  Sends a chat message to the player.
+  
+  **Parameters:**
+  - `message` - The message component
+  
+  ```java
+  player.sendMessage(Component.text("Welcome!").color(NamedTextColor.GREEN));
+  ```
+</ParamField>
+
+<ParamField path="kick(Component)" type="void">
+  Kicks the player from the server.
+  
+  **Parameters:**
+  - `reason` - The kick reason
+  
+  ```java
+  player.kick(Component.text("You have been kicked"));
+  ```
+</ParamField>
+
+<ParamField path="sendPacket(ServerPacket)" type="void">
+  Sends a packet to the player.
+  
+  **Parameters:**
+  - `packet` - The packet to send
+</ParamField>
+
+---
+
+## EntityType
+
+Represents a type of entity (autogenerated from Minecraft data).
+
+<ParamField path="fromKey(String)" type="static EntityType">
+  Gets an EntityType by namespaced key.
+  
+  **Parameters:**
+  - `key` - The entity key (e.g., "minecraft:zombie")
+  
+  **Returns:** The EntityType, or null
+  
+  ```java
+  EntityType zombie = EntityType.fromKey("minecraft:zombie");
+  ```
+</ParamField>
+
+<ParamField path="values()" type="static Collection<EntityType>">
+  Gets all registered entity types.
+  
+  **Returns:** Collection of all EntityTypes
+</ParamField>
+
+---
+
+## Examples
+
+<CodeGroup>
+```java Spawning Entities
+public class EntitySpawning {
+    public static void spawnZombie(Instance instance, Pos pos) {
+        EntityCreature zombie = new EntityCreature(EntityType.ZOMBIE);
+        zombie.setInstance(instance, pos);
+        
+        // Equip the zombie
+        zombie.setHelmet(ItemStack.of(Material.DIAMOND_HELMET));
+        zombie.setItemInMainHand(ItemStack.of(Material.DIAMOND_SWORD));
+        
+        // Make it glow
+        zombie.setGlowing(true);
+    }
+}
+```
+
+```java Player Management
+public class PlayerManager {
+    public static void setupPlayer(Player player, Instance world) {
+        // Set spawn instance and position
+        player.setRespawnPoint(new Pos(0, 64, 0));
+        
+        // Configure abilities
+        player.setAllowFlying(true);
+        player.setGameMode(GameMode.CREATIVE);
+        
+        // Give items
+        player.getInventory().addItemStack(
+            ItemStack.of(Material.DIAMOND_SWORD)
+        );
+        
+        // Send welcome message
+        player.sendMessage(
+            Component.text("Welcome to the server!")
+                .color(NamedTextColor.GOLD)
+        );
+    }
+}
+```
+
+```java Entity AI
+public class SimpleAI {
+    public static void trackPlayer(LivingEntity entity, Player target) {
+        entity.scheduleNextTick(self -> {
+            if (self.getInstance() == target.getInstance()) {
+                // Look at player
+                self.lookAt(target);
+                
+                // Move towards player
+                Vec direction = target.getPosition()
+                    .sub(self.getPosition())
+                    .normalize();
+                self.setVelocity(direction.mul(3)); // 3 blocks/sec
+            }
+            
+            // Schedule next tick
+            trackPlayer((LivingEntity) self, target);
+        });
+    }
+}
+```
+</CodeGroup>

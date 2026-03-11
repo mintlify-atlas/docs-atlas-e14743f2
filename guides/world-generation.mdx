@@ -1,0 +1,482 @@
+---
+title: 'World Generation'
+description: 'Generate custom worlds with the Generator API, noise functions, and chunk generation'
+---
+
+Minestom's world generation system uses the `Generator` interface to create terrain procedurally. This guide covers chunk generation, noise-based terrain, and custom world features.
+
+## Generator Basics
+
+The `Generator` interface is a functional interface that fills generation units with blocks and biomes.
+
+### Creating a Simple Generator
+
+```java
+import net.minestom.server.instance.InstanceContainer;
+import net.minestom.server.instance.block.Block;
+import net.minestom.server.instance.generator.Generator;
+
+InstanceContainer instance = instanceManager.createInstanceContainer();
+
+// Flat world generator
+instance.setGenerator(unit -> {
+    unit.modifier().fillHeight(0, 40, Block.STONE);
+});
+```
+
+### Setting a Generator
+
+```java
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.instance.InstanceManager;
+
+InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+InstanceContainer instance = instanceManager.createInstanceContainer();
+
+// Set the generator
+instance.setGenerator(new MyCustomGenerator());
+
+// Enable lighting
+instance.setChunkSupplier(LightingChunk::new);
+
+// Set world properties
+instance.setTimeRate(0); // Disable time progression
+instance.setTime(12000); // Noon
+```
+
+## Generation Units
+
+A `GenerationUnit` represents an area that can be generated. It provides a modifier to place blocks.
+
+### Understanding Generation Units
+
+```java
+public class SimpleGenerator implements Generator {
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        // Get unit bounds
+        Point start = unit.absoluteStart();
+        Point end = unit.absoluteEnd();
+        Point size = unit.size();
+        
+        System.out.println("Generating from " + start + " to " + end);
+        System.out.println("Size: " + size);
+        
+        // Access the modifier
+        UnitModifier modifier = unit.modifier();
+    }
+}
+```
+
+### Unit Modifier Methods
+
+```java
+import net.minestom.server.instance.generator.UnitModifier;
+
+// Fill entire unit with one block
+modifier.fill(Block.STONE);
+
+// Fill height range
+modifier.fillHeight(0, 40, Block.STONE);
+modifier.fillHeight(40, 64, Block.DIRT);
+modifier.fillHeight(64, 65, Block.GRASS_BLOCK);
+
+// Fill 3D region
+Point start = new Vec(0, 0, 0);
+Point end = new Vec(16, 10, 16);
+modifier.fill(start, end, Block.STONE);
+
+// Set individual blocks (absolute coordinates)
+modifier.setBlock(10, 40, 10, Block.DIAMOND_BLOCK);
+
+// Set blocks relative to unit start
+modifier.setRelative(0, 0, 0, Block.BEDROCK);
+```
+
+## Layer-Based Generation
+
+Create terrain with distinct layers:
+
+```java
+public class LayeredGenerator implements Generator {
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        UnitModifier modifier = unit.modifier();
+        
+        // Bedrock layer
+        modifier.fillHeight(0, 1, Block.BEDROCK);
+        
+        // Stone layer
+        modifier.fillHeight(1, 35, Block.STONE);
+        
+        // Dirt layer
+        modifier.fillHeight(35, 39, Block.DIRT);
+        
+        // Grass top
+        modifier.fillHeight(39, 40, Block.GRASS_BLOCK);
+    }
+}
+```
+
+## Noise-Based Generation
+
+Use noise functions to create natural-looking terrain:
+
+```java
+import net.minestom.server.utils.noise.NoiseGenerator;
+import net.minestom.server.utils.noise.PerlinNoise;
+
+public class NoiseTerrainGenerator implements Generator {
+    private final NoiseGenerator noise;
+    private final int baseHeight = 40;
+    private final int heightVariation = 20;
+    
+    public NoiseTerrainGenerator() {
+        // Initialize noise generator with seed
+        this.noise = new PerlinNoise(System.currentTimeMillis());
+    }
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        Point start = unit.absoluteStart();
+        UnitModifier modifier = unit.modifier();
+        
+        // Generate terrain for each x,z column
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                int worldX = start.blockX() + x;
+                int worldZ = start.blockZ() + z;
+                
+                // Sample noise (smaller scale = smoother terrain)
+                double noiseValue = noise.noise(
+                    worldX / 80.0,
+                    worldZ / 80.0
+                );
+                
+                // Convert noise (-1 to 1) to height
+                int height = (int) (baseHeight + noiseValue * heightVariation);
+                
+                // Place blocks
+                modifier.setBlock(worldX, height, worldZ, Block.GRASS_BLOCK);
+                modifier.fillHeight(worldX, worldZ, height - 3, height, Block.DIRT);
+                modifier.fillHeight(worldX, worldZ, 0, height - 3, Block.STONE);
+                modifier.fillHeight(worldX, worldZ, 0, 1, Block.BEDROCK);
+            }
+        }
+    }
+}
+```
+
+### Multi-Octave Noise
+
+Create more complex terrain with multiple noise layers:
+
+```java
+public class AdvancedNoiseGenerator implements Generator {
+    private final PerlinNoise baseNoise;
+    private final PerlinNoise detailNoise;
+    
+    public AdvancedNoiseGenerator(long seed) {
+        this.baseNoise = new PerlinNoise(seed);
+        this.detailNoise = new PerlinNoise(seed + 1);
+    }
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        Point start = unit.absoluteStart();
+        UnitModifier modifier = unit.modifier();
+        
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                int worldX = start.blockX() + x;
+                int worldZ = start.blockZ() + z;
+                
+                // Large-scale terrain
+                double base = baseNoise.noise(worldX / 100.0, worldZ / 100.0);
+                
+                // Small-scale details
+                double detail = detailNoise.noise(worldX / 20.0, worldZ / 20.0);
+                
+                // Combine noises
+                int height = (int) (40 + base * 30 + detail * 5);
+                
+                generateColumn(modifier, worldX, worldZ, height);
+            }
+        }
+    }
+    
+    private void generateColumn(UnitModifier modifier, int x, int z, int height) {
+        modifier.setBlock(x, height, z, Block.GRASS_BLOCK);
+        modifier.fillHeight(x, z, height - 4, height, Block.DIRT);
+        modifier.fillHeight(x, z, 1, height - 4, Block.STONE);
+        modifier.setBlock(x, 0, z, Block.BEDROCK);
+    }
+}
+```
+
+## Biome Generation
+
+Set biomes during world generation:
+
+```java
+import net.minestom.server.world.biome.Biome;
+import net.minestom.server.registry.DynamicRegistry;
+
+public class BiomeGenerator implements Generator {
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        UnitModifier modifier = unit.modifier();
+        Point start = unit.absoluteStart();
+        
+        // Fill with biome
+        modifier.fillBiome(Biome.PLAINS);
+        
+        // Or set biomes based on position
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                int worldX = start.blockX() + x;
+                int worldZ = start.blockZ() + z;
+                
+                // Temperature-based biome selection
+                double temperature = getTemperature(worldX, worldZ);
+                
+                if (temperature > 0.5) {
+                    modifier.setBiome(worldX, 0, worldZ, Biome.DESERT);
+                } else if (temperature < -0.5) {
+                    modifier.setBiome(worldX, 0, worldZ, Biome.SNOWY_PLAINS);
+                } else {
+                    modifier.setBiome(worldX, 0, worldZ, Biome.PLAINS);
+                }
+            }
+        }
+    }
+    
+    private double getTemperature(int x, int z) {
+        // Use noise or other method to determine temperature
+        return Math.sin(x / 100.0) * Math.cos(z / 100.0);
+    }
+}
+```
+
+## Feature Placement
+
+Add structures and features to your world:
+
+```java
+public class FeatureGenerator implements Generator {
+    private final Random random = new Random();
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        Point start = unit.absoluteStart();
+        UnitModifier modifier = unit.modifier();
+        
+        // Generate base terrain first
+        modifier.fillHeight(0, 40, Block.STONE);
+        
+        // Only place features in certain chunks
+        if (unit.absoluteStart().blockY() < 40 && 
+            unit.absoluteEnd().blockY() > 40) {
+            
+            // Place trees
+            if (random.nextFloat() < 0.1) {
+                int treeX = start.blockX() + random.nextInt(16);
+                int treeZ = start.blockZ() + random.nextInt(16);
+                placeTree(modifier, treeX, 40, treeZ);
+            }
+            
+            // Place ores
+            placeOres(modifier, start);
+        }
+    }
+    
+    private void placeTree(UnitModifier modifier, int x, int y, int z) {
+        // Trunk
+        modifier.fillHeight(x, z, y, y + 5, Block.OAK_LOG);
+        
+        // Leaves
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                for (int dy = 3; dy <= 6; dy++) {
+                    if (Math.abs(dx) == 2 && Math.abs(dz) == 2 && dy > 4) {
+                        continue; // Skip corners of top layer
+                    }
+                    modifier.setBlock(x + dx, y + dy, z + dz, Block.OAK_LEAVES);
+                }
+            }
+        }
+    }
+    
+    private void placeOres(UnitModifier modifier, Point start) {
+        for (int i = 0; i < 5; i++) {
+            int x = start.blockX() + random.nextInt(16);
+            int y = random.nextInt(30) + 5;
+            int z = start.blockZ() + random.nextInt(16);
+            
+            // Place ore vein
+            modifier.setBlock(x, y, z, Block.COAL_ORE);
+            modifier.setBlock(x + 1, y, z, Block.COAL_ORE);
+            modifier.setBlock(x, y, z + 1, Block.COAL_ORE);
+        }
+    }
+}
+```
+
+## Generation Optimization
+
+### Subdividing Units
+
+```java
+@Override
+public void generate(GenerationUnit unit) {
+    // Subdivide for parallel processing
+    List<GenerationUnit> subunits = unit.subdivide();
+    
+    for (GenerationUnit subunit : subunits) {
+        generateSubunit(subunit);
+    }
+}
+```
+
+### Using Forks
+
+```java
+@Override
+public void generate(GenerationUnit unit) {
+    UnitModifier modifier = unit.modifier();
+    
+    // Generate base terrain
+    modifier.fillHeight(0, 40, Block.STONE);
+    
+    // Fork for features (applied later)
+    unit.fork(fork -> {
+        placeStructures(fork);
+    });
+}
+```
+
+## Complete Example: Demo Generator
+
+From the Minestom demo:
+
+```java
+import net.minestom.server.instance.InstanceContainer;
+import net.minestom.server.instance.LightingChunk;
+import net.minestom.server.instance.block.Block;
+
+public class DemoWorldSetup {
+    
+    public static InstanceContainer createWorld(InstanceManager manager) {
+        InstanceContainer instance = manager.createInstanceContainer();
+        
+        // Set generator
+        instance.setGenerator(unit -> {
+            // Fill base terrain
+            unit.modifier().fillHeight(0, 40, Block.STONE);
+            
+            // Place torch on surface
+            if (unit.absoluteStart().blockY() < 40 && 
+                unit.absoluteEnd().blockY() > 40) {
+                
+                int x = unit.absoluteStart().blockX();
+                int z = unit.absoluteStart().blockZ();
+                
+                unit.modifier().setBlock(x, 40, z, Block.TORCH);
+            }
+        });
+        
+        // Enable lighting
+        instance.setChunkSupplier(LightingChunk::new);
+        
+        // Set time
+        instance.setTimeRate(0);
+        instance.setTime(12000);
+        
+        return instance;
+    }
+}
+```
+
+## Cave Generation
+
+```java
+public class CaveGenerator implements Generator {
+    private final PerlinNoise caveNoise;
+    
+    public CaveGenerator(long seed) {
+        this.caveNoise = new PerlinNoise(seed);
+    }
+    
+    @Override
+    public void generate(GenerationUnit unit) {
+        Point start = unit.absoluteStart();
+        UnitModifier modifier = unit.modifier();
+        
+        // First generate solid terrain
+        modifier.fillHeight(0, 60, Block.STONE);
+        
+        // Then carve out caves
+        for (int x = 0; x < 16; x++) {
+            for (int y = 5; y < 50; y++) {
+                for (int z = 0; z < 16; z++) {
+                    int worldX = start.blockX() + x;
+                    int worldY = start.blockY() + y;
+                    int worldZ = start.blockZ() + z;
+                    
+                    double noise = caveNoise.noise(
+                        worldX / 30.0,
+                        worldY / 20.0,
+                        worldZ / 30.0
+                    );
+                    
+                    // Carve out air where noise is high
+                    if (noise > 0.6) {
+                        modifier.setBlock(worldX, worldY, worldZ, Block.AIR);
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+## Loading Custom Chunks
+
+Load pre-generated chunks from storage:
+
+```java
+import net.minestom.server.instance.ChunkLoader;
+import net.minestom.server.instance.IChunkLoader;
+
+// Set custom chunk loader
+instance.setChunkLoader(new MyCustomChunkLoader());
+
+public class MyCustomChunkLoader implements IChunkLoader {
+    
+    @Override
+    public CompletableFuture<Chunk> loadChunk(Instance instance, int chunkX, int chunkZ) {
+        // Load from file, database, etc.
+        return CompletableFuture.completedFuture(null);
+    }
+    
+    @Override
+    public CompletableFuture<Void> saveChunk(Chunk chunk) {
+        // Save to storage
+        return CompletableFuture.completedFuture(null);
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Blocks" icon="cube" href="/guides/blocks">
+    Learn about block handlers and custom blocks
+  </Card>
+  <Card title="Entities" icon="dragon" href="/guides/entities">
+    Spawn entities in your generated world
+  </Card>
+</CardGroup>

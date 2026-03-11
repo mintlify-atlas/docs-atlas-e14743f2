@@ -1,0 +1,568 @@
+---
+title: Tags
+description: Store and retrieve custom data using Minestom's tag system
+icon: tag
+---
+
+Minestom's tag system provides a flexible way to store custom data on entities, blocks, items, and other game objects. Tags are type-safe, serializable to NBT, and support complex data structures.
+
+## Overview
+
+Tags are key-value pairs where:
+- **Keys** are strings that identify the data
+- **Values** are type-safe and can be primitives, collections, or custom objects
+- All tags are automatically serialized to NBT format
+
+<Note>
+  Tags are the recommended way to store custom data in Minestom. They integrate seamlessly with Minecraft's NBT system and are automatically persisted.
+</Note>
+
+---
+
+## Tag Types
+
+Minestom provides built-in tag types for common data types.
+
+### Primitive Tags
+
+<CodeGroup>
+```java Numbers
+// Integer tags
+Tag<Byte> byteTag = Tag.Byte("myByte");
+Tag<Short> shortTag = Tag.Short("myShort");
+Tag<Integer> intTag = Tag.Integer("myInt");
+Tag<Long> longTag = Tag.Long("myLong");
+
+// Floating point tags
+Tag<Float> floatTag = Tag.Float("myFloat");
+Tag<Double> doubleTag = Tag.Double("myDouble");
+```
+
+```java Other Primitives
+// Boolean
+Tag<Boolean> boolTag = Tag.Boolean("isActive");
+
+// String
+Tag<String> nameTag = Tag.String("playerName");
+
+// UUID
+Tag<UUID> uuidTag = Tag.UUID("uniqueId");
+```
+</CodeGroup>
+
+### Complex Tags
+
+<CodeGroup>
+```java Item and Component
+// ItemStack
+Tag<ItemStack> itemTag = Tag.ItemStack("heldItem");
+
+// Text Component
+Tag<Component> textTag = Tag.Component("displayName");
+```
+
+```java NBT Tag
+// Flexible NBT tag (can store any NBT data)
+Tag<BinaryTag> nbtTag = Tag.NBT("customData");
+```
+</CodeGroup>
+
+### Collection Tags
+
+<ParamField path="list()" type="Tag<List<T>>">
+  Creates a list tag from any existing tag type
+  
+  ```java
+  Tag<List<String>> namesTag = Tag.String("name").list();
+  
+  // Usage
+  entity.setTag(namesTag, List.of("Alice", "Bob", "Charlie"));
+  List<String> names = entity.getTag(namesTag);
+  ```
+</ParamField>
+
+### Structure Tags
+
+<ParamField path="Structure(key, serializer)" type="Tag<T>">
+  Creates a tag for complex custom objects using a serializer
+  
+  ```java
+  record PlayerStats(int kills, int deaths, double kdr) {}
+  
+  TagSerializer<PlayerStats> serializer = TagSerializer.of(
+      tag -> new PlayerStats(
+          tag.getTag(Tag.Integer("kills")),
+          tag.getTag(Tag.Integer("deaths")),
+          tag.getTag(Tag.Double("kdr"))
+      ),
+      (tag, stats) -> {
+          tag.setTag(Tag.Integer("kills"), stats.kills());
+          tag.setTag(Tag.Integer("deaths"), stats.deaths());
+          tag.setTag(Tag.Double("kdr"), stats.kdr());
+      }
+  );
+  
+  Tag<PlayerStats> statsTag = Tag.Structure("stats", serializer);
+  ```
+</ParamField>
+
+<ParamField path="Structure(key, Class)" type="Tag<T>">
+  Experimental: Creates a tag for record types with automatic serialization
+  
+  ```java
+  record Position(double x, double y, double z) {}
+  
+  Tag<Position> posTag = Tag.Structure("position", Position.class);
+  entity.setTag(posTag, new Position(10.5, 64.0, 20.5));
+  ```
+</ParamField>
+
+### Transient Tags
+
+<ParamField path="Transient(key)" type="Tag<T>">
+  Creates a tag that is NOT serialized to NBT (server-side only)
+  
+  ```java
+  Tag<Long> lastActionTime = Tag.Transient("lastAction");
+  entity.setTag(lastActionTime, System.currentTimeMillis());
+  // This tag will not be saved to disk or sent to clients
+  ```
+</ParamField>
+
+---
+
+## Taggable Interface
+
+Objects that can store tags implement the `Taggable` interface.
+
+### Common Taggable Objects
+
+- **Entities** (players, mobs, projectiles)
+- **ItemStacks**
+- **Blocks** (via block handlers)
+- **Instances** (worlds)
+- **Any custom object** implementing `Taggable`
+
+### Basic Operations
+
+<ParamField path="setTag(tag, value)" type="void">
+  Sets a tag value (null to remove)
+  
+  ```java
+  Tag<Integer> scoreTag = Tag.Integer("score");
+  entity.setTag(scoreTag, 100);
+  
+  // Remove tag
+  entity.setTag(scoreTag, null);
+  ```
+</ParamField>
+
+<ParamField path="getTag(tag)" type="T">
+  Gets a tag value (returns null if not set)
+  
+  ```java
+  Integer score = entity.getTag(scoreTag);
+  if (score != null) {
+      // Tag exists
+  }
+  ```
+</ParamField>
+
+<ParamField path="hasTag(tag)" type="boolean">
+  Checks if a tag exists
+  
+  ```java
+  if (entity.hasTag(scoreTag)) {
+      int score = entity.getTag(scoreTag);
+  }
+  ```
+</ParamField>
+
+<ParamField path="removeTag(tag)" type="void">
+  Removes a tag
+  
+  ```java
+  entity.removeTag(scoreTag);
+  ```
+</ParamField>
+
+### Advanced Operations
+
+<ParamField path="getAndSetTag(tag, value)" type="T">
+  Sets a new value and returns the previous value
+  
+  ```java
+  Integer oldScore = entity.getAndSetTag(scoreTag, 150);
+  if (oldScore != null) {
+      player.sendMessage("Previous score: " + oldScore);
+  }
+  ```
+</ParamField>
+
+<ParamField path="updateTag(tag, operator)" type="void">
+  Updates a tag value using an operator function
+  
+  ```java
+  // Increment score
+  entity.updateTag(scoreTag, score -> score == null ? 1 : score + 1);
+  ```
+</ParamField>
+
+<ParamField path="updateAndGetTag(tag, operator)" type="T">
+  Updates tag and returns the new value
+  
+  ```java
+  int newScore = entity.updateAndGetTag(scoreTag, s -> s == null ? 0 : s + 10);
+  player.sendMessage("New score: " + newScore);
+  ```
+</ParamField>
+
+<ParamField path="getAndUpdateTag(tag, operator)" type="T">
+  Returns old value and then updates tag
+  
+  ```java
+  int oldScore = entity.getAndUpdateTag(scoreTag, s -> s == null ? 0 : s + 10);
+  ```
+</ParamField>
+
+---
+
+## TagHandler
+
+The `TagHandler` class manages tag storage and serialization. All `Taggable` objects have a `TagHandler`.
+
+### Creating Tag Handlers
+
+<CodeGroup>
+```java New Handler
+// Create empty handler
+TagHandler handler = TagHandler.newHandler();
+
+// Use it
+handler.setTag(Tag.String("name"), "Steve");
+String name = handler.getTag(Tag.String("name"));
+```
+
+```java From NBT
+import net.kyori.adventure.nbt.CompoundBinaryTag;
+
+// Load from NBT
+CompoundBinaryTag nbt = CompoundBinaryTag.builder()
+    .putString("name", "Steve")
+    .putInt("level", 5)
+    .build();
+
+TagHandler handler = TagHandler.fromCompound(nbt);
+String name = handler.getTag(Tag.String("name")); // "Steve"
+```
+</CodeGroup>
+
+### Handler Operations
+
+<ParamField path="copy()" type="TagHandler">
+  Creates a deep copy of the handler
+  
+  ```java
+  TagHandler original = entity.tagHandler();
+  TagHandler copy = original.copy();
+  ```
+</ParamField>
+
+<ParamField path="readableCopy()" type="TagReadable">
+  Creates a read-only copy (more efficient than full copy)
+  
+  ```java
+  TagReadable snapshot = handler.readableCopy();
+  String name = snapshot.getTag(Tag.String("name"));
+  ```
+</ParamField>
+
+<ParamField path="asCompound()" type="CompoundBinaryTag">
+  Converts handler contents to NBT compound
+  
+  ```java
+  CompoundBinaryTag nbt = handler.asCompound();
+  // Save to file, send over network, etc.
+  ```
+</ParamField>
+
+<ParamField path="updateContent(compound)" type="void">
+  Replaces all handler content with NBT data
+  
+  ```java
+  // Clear all tags
+  handler.updateContent(CompoundBinaryTag.empty());
+  
+  // Load new data
+  handler.updateContent(loadedNbt);
+  ```
+</ParamField>
+
+---
+
+## Tag Modifiers
+
+Tags can be modified with various options.
+
+### Default Values
+
+<ParamField path="defaultValue(value)" type="Tag<T>">
+  Provides a default value when tag is not set
+  
+  ```java
+  Tag<Integer> healthTag = Tag.Integer("health").defaultValue(100);
+  
+  int health = entity.getTag(healthTag); // Returns 100 if not set
+  ```
+</ParamField>
+
+<ParamField path="defaultValue(supplier)" type="Tag<T>">
+  Provides a default value via supplier (lazy evaluation)
+  
+  ```java
+  Tag<Long> spawnTimeTag = Tag.Long("spawnTime")
+      .defaultValue(System::currentTimeMillis);
+  ```
+</ParamField>
+
+### Path Tags
+
+<ParamField path="path(path...)" type="Tag<T>">
+  Creates a nested tag path
+  
+  ```java
+  Tag<String> nameTag = Tag.String("value").path("player", "info", "name");
+  // Equivalent to NBT: {player: {info: {name: "Steve"}}}
+  
+  entity.setTag(nameTag, "Steve");
+  ```
+</ParamField>
+
+### Mapped Tags
+
+<ParamField path="map(readMap, writeMap)" type="Tag<R>">
+  Transforms tag values during read/write
+  
+  ```java
+  // Store milliseconds as seconds
+  Tag<Integer> secondsTag = Tag.Long("time")
+      .map(
+          millis -> (int)(millis / 1000),  // Read: ms -> seconds
+          seconds -> seconds * 1000L        // Write: seconds -> ms
+      );
+  
+  entity.setTag(secondsTag, 30); // Stores 30000ms
+  int seconds = entity.getTag(secondsTag); // Returns 30
+  ```
+</ParamField>
+
+---
+
+## Practical Examples
+
+<CodeGroup>
+```java Player Stats System
+public class PlayerStatsManager {
+    private static final Tag<Integer> KILLS = Tag.Integer("kills").defaultValue(0);
+    private static final Tag<Integer> DEATHS = Tag.Integer("deaths").defaultValue(0);
+    private static final Tag<Double> KDR = Tag.Double("kdr").defaultValue(0.0);
+    
+    public static void addKill(Player player) {
+        player.updateTag(KILLS, k -> k + 1);
+        updateKDR(player);
+    }
+    
+    public static void addDeath(Player player) {
+        player.updateTag(DEATHS, d -> d + 1);
+        updateKDR(player);
+    }
+    
+    private static void updateKDR(Player player) {
+        int kills = player.getTag(KILLS);
+        int deaths = player.getTag(DEATHS);
+        double kdr = deaths == 0 ? kills : (double) kills / deaths;
+        player.setTag(KDR, kdr);
+    }
+    
+    public static void displayStats(Player player) {
+        player.sendMessage(Component.text("Stats:"));
+        player.sendMessage(Component.text("Kills: " + player.getTag(KILLS)));
+        player.sendMessage(Component.text("Deaths: " + player.getTag(DEATHS)));
+        player.sendMessage(Component.text("K/D: " + 
+            String.format("%.2f", player.getTag(KDR))));
+    }
+}
+```
+
+```java Custom Item Data
+public class MagicItem {
+    private static final Tag<Integer> CHARGES = Tag.Integer("charges").defaultValue(10);
+    private static final Tag<String> ELEMENT = Tag.String("element").defaultValue("fire");
+    private static final Tag<List<String>> ENCHANTS = Tag.String("enchant").list();
+    
+    public static ItemStack createWand(String element, int charges) {
+        ItemStack wand = ItemStack.of(Material.STICK)
+            .withDisplayName(Component.text("Magic Wand"));
+        
+        wand.setTag(ELEMENT, element);
+        wand.setTag(CHARGES, charges);
+        wand.setTag(ENCHANTS, new ArrayList<>(List.of("power", "efficiency")));
+        
+        return wand;
+    }
+    
+    public static boolean useCharge(ItemStack item) {
+        if (!item.hasTag(CHARGES)) return false;
+        
+        int charges = item.getAndUpdateTag(CHARGES, c -> Math.max(0, c - 1));
+        if (charges <= 0) {
+            // Wand depleted
+            return false;
+        }
+        return true;
+    }
+    
+    public static void recharge(ItemStack item) {
+        item.setTag(CHARGES, 10);
+    }
+}
+```
+
+```java Cooldown System
+public class CooldownManager {
+    private static final Tag<Long> LAST_USE = Tag.Transient("lastUse");
+    
+    public static boolean isOnCooldown(Player player, long cooldownMs) {
+        Long lastUse = player.getTag(LAST_USE);
+        if (lastUse == null) return false;
+        
+        return System.currentTimeMillis() - lastUse < cooldownMs;
+    }
+    
+    public static void setCooldown(Player player) {
+        player.setTag(LAST_USE, System.currentTimeMillis());
+    }
+    
+    public static long getRemainingCooldown(Player player, long cooldownMs) {
+        Long lastUse = player.getTag(LAST_USE);
+        if (lastUse == null) return 0;
+        
+        long elapsed = System.currentTimeMillis() - lastUse;
+        return Math.max(0, cooldownMs - elapsed);
+    }
+}
+
+// Usage
+if (CooldownManager.isOnCooldown(player, 5000)) {
+    long remaining = CooldownManager.getRemainingCooldown(player, 5000);
+    player.sendMessage("Cooldown: " + (remaining / 1000) + "s");
+    return;
+}
+
+// Use ability
+CooldownManager.setCooldown(player);
+```
+
+```java Quest System
+public class QuestSystem {
+    record Quest(String id, String name, int progress, int maxProgress) {}
+    
+    private static final Tag<String> QUEST_ID = Tag.String("id");
+    private static final Tag<String> QUEST_NAME = Tag.String("name");
+    private static final Tag<Integer> PROGRESS = Tag.Integer("progress");
+    private static final Tag<Integer> MAX = Tag.Integer("max");
+    
+    private static final TagSerializer<Quest> QUEST_SERIALIZER = TagSerializer.of(
+        handler -> new Quest(
+            handler.getTag(QUEST_ID),
+            handler.getTag(QUEST_NAME),
+            handler.getTag(PROGRESS),
+            handler.getTag(MAX)
+        ),
+        (handler, quest) -> {
+            handler.setTag(QUEST_ID, quest.id());
+            handler.setTag(QUEST_NAME, quest.name());
+            handler.setTag(PROGRESS, quest.progress());
+            handler.setTag(MAX, quest.maxProgress());
+        }
+    );
+    
+    private static final Tag<Quest> ACTIVE_QUEST = 
+        Tag.Structure("activeQuest", QUEST_SERIALIZER);
+    
+    public static void startQuest(Player player, String id, String name, int max) {
+        Quest quest = new Quest(id, name, 0, max);
+        player.setTag(ACTIVE_QUEST, quest);
+        player.sendMessage(Component.text("Quest started: " + name));
+    }
+    
+    public static void addProgress(Player player, int amount) {
+        player.updateTag(ACTIVE_QUEST, quest -> {
+            if (quest == null) return null;
+            
+            int newProgress = Math.min(quest.progress() + amount, quest.maxProgress());
+            Quest updated = new Quest(
+                quest.id(), quest.name(), newProgress, quest.maxProgress()
+            );
+            
+            if (newProgress >= quest.maxProgress()) {
+                player.sendMessage(Component.text("Quest complete!"));
+            }
+            
+            return updated;
+        });
+    }
+}
+```
+</CodeGroup>
+
+---
+
+## Best Practices
+
+<Note>
+  **Use static final Tag instances**: Create tag instances once and reuse them throughout your code. This improves performance and ensures consistency.
+  
+  ```java
+  // Good
+  private static final Tag<Integer> SCORE = Tag.Integer("score");
+  
+  // Bad - creates new tag instance every time
+  public int getScore(Player player) {
+      return player.getTag(Tag.Integer("score"));
+  }
+  ```
+</Note>
+
+<Note>
+  **Use transient tags for temporary data**: Data that doesn't need to persist (like cooldowns, cached calculations) should use `Tag.Transient()` to avoid unnecessary serialization.
+</Note>
+
+<Note>
+  **Check for null values**: `getTag()` returns null if the tag is not set. Always handle null values or use `defaultValue()`.
+  
+  ```java
+  // With null check
+  Integer score = player.getTag(SCORE);
+  if (score != null) {
+      // Use score
+  }
+  
+  // With default value (preferred)
+  Tag<Integer> SCORE = Tag.Integer("score").defaultValue(0);
+  int score = player.getTag(SCORE); // Never null
+  ```
+</Note>
+
+<Note>
+  **Use updateTag for modifications**: Instead of get-modify-set, use `updateTag()` for atomic updates.
+  
+  ```java
+  // Good
+  player.updateTag(SCORE, s -> s + 10);
+  
+  // Less ideal
+  int score = player.getTag(SCORE);
+  player.setTag(SCORE, score + 10);
+  ```
+</Note>

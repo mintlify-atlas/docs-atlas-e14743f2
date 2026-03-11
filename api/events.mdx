@@ -1,0 +1,364 @@
+---
+title: Events API
+description: Event system for listening to and handling server events
+---
+
+## Overview
+
+Minestom's event system provides a powerful, hierarchical event graph for handling all server events. The system is based on event nodes that can filter and propagate events to listeners.
+
+## Core Components
+
+### EventNode
+
+Represents a single node in the event graph. A node can contain children and listeners, filtering events based on conditions before propagating them.
+
+<ParamField path="EventNode<T>" type="interface">
+  Generic event node that accepts events of type `T`
+</ParamField>
+
+#### Creating Event Nodes
+
+<CodeGroup>
+```java All Events
+// Accept any event type
+EventNode<Event> node = EventNode.all("demo");
+```
+
+```java Type Filter
+// Accept only player events
+EventNode<PlayerEvent> playerNode = EventNode.type("player-events", EventFilter.PLAYER);
+```
+
+```java With Condition
+// Accept player events with a condition
+EventNode<PlayerEvent> node = EventNode.event("abc", EventFilter.PLAYER, event -> {
+    var position = event.getPlayer().getPosition();
+    return position.x() > 0 && position.z() > 0;
+});
+```
+
+```java Value-Based Filter
+// Filter based on the event handler value
+EventNode<PlayerEvent> creativeNode = EventNode.value(
+    "creative-players", 
+    EventFilter.PLAYER, 
+    Player::isCreative
+);
+```
+</CodeGroup>
+
+#### Node Methods
+
+<ResponseField name="call" type="void">
+  Calls an event starting from this node
+  
+  <Expandable title="parameters">
+    <ParamField path="event" type="T">
+      The event to call
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="callCancellable" type="void">
+  Execute a cancellable event with a success callback
+  
+  <Expandable title="parameters">
+    <ParamField path="event" type="T">
+      The event to execute
+    </ParamField>
+    <ParamField path="successCallback" type="Runnable">
+      Callback executed if event is not cancelled
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="addListener" type="EventNode<T>">
+  Adds a listener to this node
+  
+  <Expandable title="parameters">
+    <ParamField path="listener" type="EventListener<? extends T>">
+      The listener to add
+    </ParamField>
+  </Expandable>
+  
+  Returns `this` for method chaining
+</ResponseField>
+
+<ResponseField name="removeListener" type="EventNode<T>">
+  Removes a listener from this node
+  
+  <Expandable title="parameters">
+    <ParamField path="listener" type="EventListener<? extends T>">
+      The listener to remove
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="addChild" type="EventNode<T>">
+  Adds a child node
+  
+  <Expandable title="parameters">
+    <ParamField path="child" type="EventNode<? extends T>">
+      The child node to add
+    </ParamField>
+  </Expandable>
+  
+  Returns `this` for method chaining
+</ResponseField>
+
+<ResponseField name="removeChild" type="EventNode<T>">
+  Removes a child node
+  
+  <Expandable title="parameters">
+    <ParamField path="child" type="EventNode<? extends T>">
+      The child node to remove
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="findChildren" type="List<EventNode<E>>">
+  Locates all child nodes with the given name and type recursively
+  
+  <Expandable title="parameters">
+    <ParamField path="name" type="String">
+      The event node name to filter for
+    </ParamField>
+    <ParamField path="eventType" type="Class<E>">
+      The event node type to filter for
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setPriority" type="EventNode<T>">
+  Sets the priority of this node
+  
+  <Expandable title="parameters">
+    <ParamField path="priority" type="int">
+      The priority value (higher = executed first)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### EventListener
+
+Represents an event listener (handler) that executes actions when events trigger.
+
+#### Creating Listeners
+
+<CodeGroup>
+```java Simple Listener
+// Create a basic listener
+EventListener<PlayerLoginEvent> listener = EventListener.of(
+    PlayerLoginEvent.class,
+    event -> {
+        System.out.println(event.getPlayer().getUsername() + " logged in");
+    }
+);
+```
+
+```java Builder Pattern
+// Create listener with advanced options
+EventListener<PlayerMoveEvent> listener = EventListener.builder(PlayerMoveEvent.class)
+    .filter(event -> event.getPlayer().hasPermission("special"))
+    .ignoreCancelled(true)
+    .expireCount(5) // Remove after 5 executions
+    .handler(event -> {
+        // Handle event
+    })
+    .build();
+```
+
+```java Conditional Expiration
+EventListener<PlayerDeathEvent> listener = EventListener.builder(PlayerDeathEvent.class)
+    .expireWhen(event -> event.getPlayer().getName().equals("Notch"))
+    .handler(event -> {
+        // This listener expires when Notch dies
+    })
+    .build();
+```
+</CodeGroup>
+
+#### Builder Methods
+
+<ResponseField name="filter" type="Builder<T>">
+  Adds a filter condition - listener only executes if condition passes
+  
+  <Expandable title="parameters">
+    <ParamField path="filter" type="Predicate<T>">
+      The filter predicate
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="ignoreCancelled" type="Builder<T>">
+  Specifies whether to ignore cancelled events (default: true)
+  
+  <Expandable title="parameters">
+    <ParamField path="ignoreCancelled" type="boolean">
+      True to stop processing cancelled events
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="expireCount" type="Builder<T>">
+  Removes listener after specified executions
+  
+  <Expandable title="parameters">
+    <ParamField path="expireCount" type="int">
+      Number of times to execute before removal
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="expireWhen" type="Builder<T>">
+  Expires listener when condition is met
+  
+  <Expandable title="parameters">
+    <ParamField path="expireWhen" type="Predicate<T>">
+      Condition to test for expiration
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="handler" type="Builder<T>">
+  Sets the handler function
+  
+  <Expandable title="parameters">
+    <ParamField path="handler" type="Consumer<T>">
+      The event handler function
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### GlobalEventHandler
+
+Object containing all global event listeners. Accessible from `MinecraftServer.getGlobalEventHandler()`.
+
+<CodeGroup>
+```java Global Events
+GlobalEventHandler globalHandler = MinecraftServer.getGlobalEventHandler();
+
+// Listen to player login globally
+globalHandler.addListener(PlayerLoginEvent.class, event -> {
+    System.out.println("Player joined: " + event.getPlayer().getUsername());
+});
+```
+</CodeGroup>
+
+### EventFilter
+
+Represents a filter for specific event types based on a "handler" target.
+
+#### Built-in Filters
+
+<ParamField path="EventFilter.ALL" type="EventFilter<Event, ?>">
+  Accepts all event types
+</ParamField>
+
+<ParamField path="EventFilter.PLAYER" type="EventFilter<PlayerEvent, Player>">
+  Filters player events, provides Player as handler
+</ParamField>
+
+<ParamField path="EventFilter.ENTITY" type="EventFilter<EntityEvent, Entity>">
+  Filters entity events, provides Entity as handler
+</ParamField>
+
+<ParamField path="EventFilter.INSTANCE" type="EventFilter<InstanceEvent, Instance>">
+  Filters instance events, provides Instance as handler
+</ParamField>
+
+<ParamField path="EventFilter.INVENTORY" type="EventFilter<InventoryEvent, AbstractInventory>">
+  Filters inventory events, provides AbstractInventory as handler
+</ParamField>
+
+<ParamField path="EventFilter.ITEM" type="EventFilter<ItemEvent, ItemStack>">
+  Filters item events, provides ItemStack as handler
+</ParamField>
+
+<ParamField path="EventFilter.BLOCK" type="EventFilter<BlockEvent, Block>">
+  Filters block events, provides Block as handler
+</ParamField>
+
+#### Custom Filters
+
+<CodeGroup>
+```java Custom Filter
+EventFilter<MyEvent, MyHandler> customFilter = EventFilter.from(
+    MyEvent.class,
+    MyHandler.class,
+    event -> event.getMyHandler()
+);
+```
+</CodeGroup>
+
+## Usage Examples
+
+### Hierarchical Event System
+
+<CodeGroup>
+```java Event Hierarchy
+// Create a main event node
+EventNode<Event> mainNode = EventNode.all("main");
+
+// Create specialized child nodes
+EventNode<PlayerEvent> playerNode = EventNode.type("players", EventFilter.PLAYER);
+EventNode<EntityEvent> entityNode = EventNode.type("entities", EventFilter.ENTITY);
+
+// Add children to main node
+mainNode.addChild(playerNode);
+mainNode.addChild(entityNode);
+
+// Add listeners to child nodes
+playerNode.addListener(PlayerMoveEvent.class, event -> {
+    // Handle player movement
+});
+
+entityNode.addListener(EntityDeathEvent.class, event -> {
+    // Handle entity death
+});
+
+// Register main node
+MinecraftServer.getGlobalEventHandler().addChild(mainNode);
+```
+</CodeGroup>
+
+### Instance-Specific Events
+
+<CodeGroup>
+```java Instance Events
+Instance instance = /* get instance */;
+
+// Get the instance's event node
+EventNode<InstanceEvent> instanceNode = instance.eventNode();
+
+// Listen to events only in this instance
+instanceNode.addListener(PlayerBlockBreakEvent.class, event -> {
+    // Only called for blocks broken in this instance
+});
+```
+</CodeGroup>
+
+### Tag-Based Filtering
+
+<CodeGroup>
+```java Tag Filter
+Tag<Boolean> PVP_TAG = Tag.Boolean("pvp_enabled");
+
+// Create node that only accepts events from entities with the tag
+EventNode<PlayerEvent> pvpNode = EventNode.tag(
+    "pvp-zone",
+    EventFilter.PLAYER,
+    PVP_TAG,
+    enabled -> enabled != null && enabled
+);
+
+pvpNode.addListener(PlayerDamageEvent.class, event -> {
+    // Only called for players with pvp_enabled tag set to true
+});
+```
+</CodeGroup>
+
+<Note>
+  Event nodes are hierarchical - children only receive events that pass through their parent's filters.
+</Note>

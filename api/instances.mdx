@@ -1,0 +1,510 @@
+---
+title: 'Instances'
+description: 'Instance and InstanceManager API for managing worlds in Minestom'
+icon: 'globe'
+---
+
+## Overview
+
+Instances are what Minecraft calls "worlds". Each instance contains entities, chunks, and has its own properties like dimension type, time, and weather.
+
+---
+
+## InstanceManager
+
+The InstanceManager handles the registration and lifecycle of all instances in the server.
+
+### Creating Instances
+
+<ParamField path="createInstanceContainer()" type="InstanceContainer">
+  Creates and registers a new InstanceContainer with default settings (Overworld dimension).
+  
+  **Returns:** The created and registered InstanceContainer
+  
+  ```java
+  InstanceManager manager = MinecraftServer.getInstanceManager();
+  InstanceContainer world = manager.createInstanceContainer();
+  ```
+</ParamField>
+
+<ParamField path="createInstanceContainer(RegistryKey<DimensionType>)" type="InstanceContainer">
+  Creates an instance with a specific dimension type.
+  
+  **Parameters:**
+  - `dimensionType` - The dimension type (e.g., DimensionType.OVERWORLD, DimensionType.NETHER)
+  
+  **Returns:** The created InstanceContainer
+  
+  ```java
+  InstanceContainer nether = manager.createInstanceContainer(DimensionType.NETHER);
+  ```
+</ParamField>
+
+<ParamField path="createInstanceContainer(RegistryKey<DimensionType>, ChunkLoader)" type="InstanceContainer">
+  Creates an instance with a dimension type and chunk loader for persistence.
+  
+  **Parameters:**
+  - `dimensionType` - The dimension type
+  - `loader` - ChunkLoader for loading/saving chunks (null for no persistence)
+  
+  **Returns:** The created InstanceContainer
+  
+  ```java
+  AnvilLoader loader = new AnvilLoader("worlds/world");
+  InstanceContainer world = manager.createInstanceContainer(DimensionType.OVERWORLD, loader);
+  ```
+</ParamField>
+
+### Shared Instances
+
+<ParamField path="createSharedInstance(InstanceContainer)" type="SharedInstance">
+  Creates a shared instance that shares chunks with a parent InstanceContainer.
+  
+  **Parameters:**
+  - `instanceContainer` - The parent instance container
+  
+  **Returns:** The created SharedInstance
+  
+  **Throws:** IllegalStateException if the container is not registered
+  
+  ```java
+  SharedInstance lobby = manager.createSharedInstance(world);
+  // lobby shares chunks with world but can have different time/weather
+  ```
+</ParamField>
+
+### Managing Instances
+
+<ParamField path="registerInstance(Instance)" type="void">
+  Manually registers an instance. Required if you instantiate an instance directly.
+  
+  **Parameters:**
+  - `instance` - The instance to register
+  
+  <Note>
+    Not necessary if using `createInstanceContainer()` or `createSharedInstance()`
+  </Note>
+</ParamField>
+
+<ParamField path="unregisterInstance(Instance)" type="void">
+  Unregisters an instance and unloads all its chunks.
+  
+  **Parameters:**
+  - `instance` - The instance to unregister
+  
+  **Throws:** IllegalStateException if the instance has online players
+  
+  ```java
+  manager.unregisterInstance(world);
+  ```
+</ParamField>
+
+<ParamField path="getInstances()" type="Set<Instance>">
+  Gets all registered instances.
+  
+  **Returns:** Unmodifiable set of all instances
+  
+  ```java
+  for (Instance instance : manager.getInstances()) {
+      System.out.println("Instance: " + instance.getUuid());
+  }
+  ```
+</ParamField>
+
+<ParamField path="getInstance(UUID)" type="Instance">
+  Gets an instance by its UUID.
+  
+  **Parameters:**
+  - `uuid` - The instance UUID
+  
+  **Returns:** The instance, or null if not found
+</ParamField>
+
+---
+
+## Instance
+
+The Instance class represents a world with chunks, entities, time, and weather.
+
+### Block Operations
+
+<ParamField path="setBlock(int, int, int, Block)" type="void">
+  Sets a block at the specified coordinates.
+  
+  **Parameters:**
+  - `x` - Block X coordinate
+  - `y` - Block Y coordinate  
+  - `z` - Block Z coordinate
+  - `block` - The block to place
+  
+  ```java
+  instance.setBlock(0, 64, 0, Block.STONE);
+  ```
+</ParamField>
+
+<ParamField path="setBlock(Point, Block)" type="void">
+  Sets a block at the specified position.
+  
+  **Parameters:**
+  - `blockPosition` - The block position
+  - `block` - The block to place
+  
+  ```java
+  instance.setBlock(new Vec(0, 64, 0), Block.DIAMOND_BLOCK);
+  ```
+</ParamField>
+
+<ParamField path="setBlock(int, int, int, Block, boolean)" type="void">
+  Sets a block with control over block updates.
+  
+  **Parameters:**
+  - `x`, `y`, `z` - Block coordinates
+  - `block` - The block to place
+  - `doBlockUpdates` - Whether to trigger block updates
+  
+  ```java
+  instance.setBlock(0, 64, 0, Block.WATER, false); // No physics updates
+  ```
+</ParamField>
+
+<ParamField path="getBlock(int, int, int)" type="Block">
+  Gets the block at specified coordinates.
+  
+  **Parameters:**
+  - `x`, `y`, `z` - Block coordinates
+  
+  **Returns:** The block at the position
+  
+  ```java
+  Block block = instance.getBlock(0, 64, 0);
+  if (block.compare(Block.STONE)) {
+      // Block is stone
+  }
+  ```
+</ParamField>
+
+<ParamField path="getBlock(Point)" type="Block">
+  Gets the block at the specified point.
+  
+  **Parameters:**
+  - `point` - The position
+  
+  **Returns:** The block at the position
+</ParamField>
+
+### Chunk Management
+
+<ParamField path="loadChunk(int, int)" type="CompletableFuture<Chunk>">
+  Forces loading of a chunk, generating it if needed.
+  
+  **Parameters:**
+  - `chunkX` - Chunk X coordinate
+  - `chunkZ` - Chunk Z coordinate
+  
+  **Returns:** Future completed when chunk is loaded
+  
+  ```java
+  instance.loadChunk(0, 0).thenAccept(chunk -> {
+      System.out.println("Chunk loaded!");
+  });
+  ```
+</ParamField>
+
+<ParamField path="loadChunk(Point)" type="CompletableFuture<Chunk>">
+  Loads the chunk at the given point.
+  
+  **Parameters:**
+  - `point` - Position in the chunk
+  
+  **Returns:** Future completed when chunk is loaded
+</ParamField>
+
+<ParamField path="loadOptionalChunk(int, int)" type="CompletableFuture<Chunk>">
+  Loads a chunk only if auto chunk loading is enabled or chunk is already loaded.
+  
+  **Parameters:**
+  - `chunkX`, `chunkZ` - Chunk coordinates
+  
+  **Returns:** Future with chunk (can be null if not loaded)
+</ParamField>
+
+<ParamField path="unloadChunk(Chunk)" type="void">
+  Schedules a chunk for unloading. All non-player entities will be removed.
+  
+  **Parameters:**
+  - `chunk` - The chunk to unload
+  
+  ```java
+  Chunk chunk = instance.getChunk(0, 0);
+  instance.unloadChunk(chunk);
+  ```
+</ParamField>
+
+<ParamField path="unloadChunk(int, int)" type="void">
+  Unloads the chunk at the specified coordinates.
+  
+  **Parameters:**
+  - `chunkX`, `chunkZ` - Chunk coordinates
+</ParamField>
+
+<ParamField path="getChunk(int, int)" type="Chunk">
+  Gets an already loaded chunk.
+  
+  **Parameters:**
+  - `chunkX`, `chunkZ` - Chunk coordinates
+  
+  **Returns:** The chunk if loaded, null otherwise
+  
+  <Warning>
+    Only returns already-loaded chunks. Use `loadChunk()` to load new chunks.
+  </Warning>
+</ParamField>
+
+<ParamField path="isChunkLoaded(int, int)" type="boolean">
+  Checks if a chunk is loaded.
+  
+  **Parameters:**
+  - `chunkX`, `chunkZ` - Chunk coordinates
+  
+  **Returns:** true if the chunk is loaded
+</ParamField>
+
+<ParamField path="getChunks()" type="Collection<Chunk>">
+  Gets all loaded chunks in this instance.
+  
+  **Returns:** Unmodifiable collection of loaded chunks
+</ParamField>
+
+### Chunk Generation
+
+<ParamField path="setGenerator(Generator)" type="void">
+  Sets the chunk generator for this instance.
+  
+  **Parameters:**
+  - `generator` - The generator (null to disable)
+  
+  ```java
+  instance.setGenerator(unit -> {
+      unit.modifier().fillHeight(0, 40, Block.STONE);
+      unit.modifier().fillHeight(40, 41, Block.GRASS_BLOCK);
+  });
+  ```
+</ParamField>
+
+<ParamField path="generator()" type="Generator">
+  Gets the current chunk generator.
+  
+  **Returns:** The generator, or null if not set
+</ParamField>
+
+<ParamField path="enableAutoChunkLoad(boolean)" type="void">
+  Enables or disables automatic chunk loading.
+  
+  **Parameters:**
+  - `enable` - true to enable auto chunk loading
+  
+  ```java
+  instance.enableAutoChunkLoad(true);
+  ```
+</ParamField>
+
+<ParamField path="hasEnabledAutoChunkLoad()" type="boolean">
+  Checks if auto chunk loading is enabled.
+  
+  **Returns:** true if enabled
+</ParamField>
+
+### World Properties
+
+<ParamField path="getDimensionType()" type="RegistryKey<DimensionType>">
+  Gets the dimension type registry key.
+  
+  **Returns:** The dimension type key
+</ParamField>
+
+<ParamField path="getDimensionName()" type="String">
+  Gets the dimension name.
+  
+  **Returns:** The dimension name as a string
+</ParamField>
+
+<ParamField path="getUuid()" type="UUID">
+  Gets the instance UUID.
+  
+  **Returns:** The instance UUID
+</ParamField>
+
+### Time Management
+
+<ParamField path="getTime()" type="long">
+  Gets the current time in the instance (sun/moon position).
+  
+  **Returns:** The time in ticks (0-24000)
+</ParamField>
+
+<ParamField path="setTime(long)" type="void">
+  Sets the instance time.
+  
+  **Parameters:**
+  - `time` - Time in ticks (0 = dawn, 6000 = noon, 12000 = dusk, 18000 = midnight)
+  
+  ```java
+  instance.setTime(6000); // Set to noon
+  ```
+</ParamField>
+
+<ParamField path="getWorldAge()" type="long">
+  Gets the age of the instance in ticks.
+  
+  **Returns:** The world age
+</ParamField>
+
+<ParamField path="setWorldAge(long)" type="void">
+  Sets the world age in ticks.
+  
+  **Parameters:**
+  - `worldAge` - The new world age
+</ParamField>
+
+<ParamField path="setTimeRate(int)" type="void">
+  Sets how fast time advances (default: 1).
+  
+  **Parameters:**
+  - `timeRate` - Ticks to advance per server tick (0 to stop time)
+</ParamField>
+
+### Persistence
+
+<ParamField path="saveInstance()" type="CompletableFuture<Void>">
+  Saves instance data (tags only, not chunks).
+  
+  **Returns:** Future completed when save finishes
+  
+  ```java
+  instance.saveInstance().thenRun(() -> {
+      System.out.println("Instance saved!");
+  });
+  ```
+</ParamField>
+
+<ParamField path="saveChunkToStorage(Chunk)" type="CompletableFuture<Void>">
+  Saves a specific chunk to permanent storage.
+  
+  **Parameters:**
+  - `chunk` - The chunk to save
+  
+  **Returns:** Future completed when save finishes
+</ParamField>
+
+<ParamField path="saveChunksToStorage()" type="CompletableFuture<Void>">
+  Saves all loaded chunks to permanent storage.
+  
+  **Returns:** Future completed when all chunks are saved
+</ParamField>
+
+---
+
+## Examples
+
+<CodeGroup>
+```java Basic World Setup
+public class WorldSetup {
+    public static void main(String[] args) {
+        MinecraftServer server = MinecraftServer.init();
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        
+        // Create instance with generator
+        InstanceContainer world = instanceManager.createInstanceContainer();
+        world.setGenerator(unit -> {
+            unit.modifier().fillHeight(0, 40, Block.STONE);
+            unit.modifier().fillHeight(40, 41, Block.GRASS_BLOCK);
+        });
+        
+        // Enable auto chunk loading
+        world.enableAutoChunkLoad(true);
+        
+        // Set time
+        world.setTime(6000); // Noon
+        
+        server.start("0.0.0.0", 25565);
+    }
+}
+```
+
+```java Multiple Worlds
+public class MultiWorld {
+    public static void main(String[] args) {
+        MinecraftServer.init();
+        InstanceManager manager = MinecraftServer.getInstanceManager();
+        
+        // Overworld
+        InstanceContainer overworld = manager.createInstanceContainer(
+            DimensionType.OVERWORLD
+        );
+        
+        // Nether
+        InstanceContainer nether = manager.createInstanceContainer(
+            DimensionType.NETHER
+        );
+        
+        // Shared lobby (shares chunks with overworld)
+        SharedInstance lobby = manager.createSharedInstance(overworld);
+        lobby.setTime(6000); // Different time than overworld
+    }
+}
+```
+
+```java Chunk Loading
+public class ChunkExample {
+    public static void loadChunks(Instance instance) {
+        // Load single chunk
+        instance.loadChunk(0, 0).thenAccept(chunk -> {
+            System.out.println("Chunk loaded at 0, 0");
+        });
+        
+        // Load multiple chunks
+        List<CompletableFuture<Chunk>> futures = new ArrayList<>();
+        for (int x = -5; x <= 5; x++) {
+            for (int z = -5; z <= 5; z++) {
+                futures.add(instance.loadChunk(x, z));
+            }
+        }
+        
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .thenRun(() -> {
+                System.out.println("All chunks loaded!");
+            });
+    }
+}
+```
+
+```java Block Manipulation
+public class BlockExample {
+    public static void buildStructure(Instance instance, Pos pos) {
+        int x = pos.blockX();
+        int y = pos.blockY();
+        int z = pos.blockZ();
+        
+        // Build a simple platform
+        for (int dx = -5; dx <= 5; dx++) {
+            for (int dz = -5; dz <= 5; dz++) {
+                instance.setBlock(x + dx, y, z + dz, Block.STONE);
+            }
+        }
+        
+        // Place a diamond block in the center
+        instance.setBlock(x, y + 1, z, Block.DIAMOND_BLOCK);
+        
+        // Get and check block
+        Block block = instance.getBlock(x, y + 1, z);
+        if (block.compare(Block.DIAMOND_BLOCK)) {
+            System.out.println("Diamond block placed!");
+        }
+    }
+}
+```
+</CodeGroup>
+
+<Note>
+  Instances must be registered before players can join them. Use `createInstanceContainer()` which automatically registers, or manually call `registerInstance()`.
+</Note>

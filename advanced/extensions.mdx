@@ -1,0 +1,552 @@
+---
+title: Extensions & Extras
+description: Extend Minestom with custom extensions and leverage built-in extras for additional functionality
+---
+
+## Extension System
+
+Minestom currently does not have a traditional plugin/extension system like Bukkit/Spigot. Instead, it's designed as a library that you include in your project and extend through composition.
+
+### Library-First Approach
+
+Minestom is intentionally built as a library rather than a traditional server with a plugin API:
+
+```java
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.event.GlobalEventHandler;
+
+public class MyMinestomServer {
+    public static void main(String[] args) {
+        // Initialize the server
+        MinecraftServer server = MinecraftServer.init();
+        
+        // Your custom logic here
+        GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+        
+        // Register custom features
+        registerGameModes();
+        registerCommands();
+        registerEvents();
+        
+        // Start the server
+        server.start("0.0.0.0", 25565);
+    }
+    
+    private static void registerGameModes() {
+        // Your game mode logic
+    }
+    
+    private static void registerCommands() {
+        // Your command logic
+    }
+    
+    private static void registerEvents() {
+        // Your event logic
+    }
+}
+```
+
+<Info>
+This design gives you complete control over your server's architecture. You can structure your code however you want without being constrained by a plugin API.
+</Info>
+
+### Organizing Your Code
+
+While there's no formal extension system, you can structure your code modularly:
+
+```java
+public interface ServerModule {
+    void initialize();
+    void shutdown();
+}
+
+public class GameModule implements ServerModule {
+    @Override
+    public void initialize() {
+        // Register game logic
+        GlobalEventHandler handler = MinecraftServer.getGlobalEventHandler();
+        handler.addListener(PlayerLoginEvent.class, this::onPlayerLogin);
+    }
+    
+    @Override
+    public void shutdown() {
+        // Cleanup
+    }
+    
+    private void onPlayerLogin(PlayerLoginEvent event) {
+        // Handle player login
+    }
+}
+
+public class ModularServer {
+    private final List<ServerModule> modules = new ArrayList<>();
+    
+    public void loadModule(ServerModule module) {
+        modules.add(module);
+        module.initialize();
+    }
+    
+    public void shutdown() {
+        modules.forEach(ServerModule::shutdown);
+    }
+}
+```
+
+<Tip>
+Consider using dependency injection frameworks like Guice or Spring to manage your modules for larger projects.
+</Tip>
+
+## Extras Package
+
+Minestom includes several "extras" - optional features that provide common functionality without bloating the core library.
+
+### OpenToLAN
+
+The OpenToLAN extra allows your server to appear in the Minecraft client's LAN server list.
+
+```java
+import net.minestom.server.extras.lan.OpenToLAN;
+import net.minestom.server.extras.lan.OpenToLANConfig;
+
+public class LANServerExample {
+    public void setupLANBroadcast() {
+        // Basic usage with defaults
+        boolean success = OpenToLAN.open();
+        
+        if (success) {
+            System.out.println("Server is now broadcasting to LAN!");
+        }
+    }
+    
+    public void setupCustomLANBroadcast() {
+        // Advanced configuration
+        OpenToLANConfig config = new OpenToLANConfig()
+            .port(0) // 0 = random free port
+            .pingDelay(Duration.ofSeconds(1)) // Send ping every 1 second
+            .eventCallDelay(Duration.ofSeconds(30)); // Refresh server list event every 30s
+        
+        OpenToLAN.open(config);
+    }
+    
+    public void stopLANBroadcast() {
+        // Stop broadcasting
+        boolean wasStopped = OpenToLAN.close();
+    }
+    
+    public void checkLANStatus() {
+        // Check if currently broadcasting
+        if (OpenToLAN.isOpen()) {
+            System.out.println("LAN broadcasting is active");
+        }
+    }
+}
+```
+
+<Note>
+OpenToLAN doesn't actually open your server to your network - it just broadcasts its presence. Your server must already be accessible on your LAN.
+</Note>
+
+#### How It Works
+
+OpenToLAN sends UDP packets to the multicast address `224.0.2.60:4445`, which Minecraft clients listen to:
+
+```java
+// The OpenToLAN system:
+// 1. Creates a DatagramSocket on the configured port
+// 2. Periodically sends server info to 224.0.2.60:4445
+// 3. Clients on the same network receive these packets
+// 4. Clients display the server in their server list under "LAN Worlds"
+```
+
+#### Customizing Server Info
+
+You can customize what information is broadcast:
+
+```java
+import net.minestom.server.event.server.ServerListPingEvent;
+import net.minestom.server.MinecraftServer;
+
+public class CustomLANInfo {
+    public void customizeLANBroadcast() {
+        GlobalEventHandler handler = MinecraftServer.getGlobalEventHandler();
+        
+        handler.addListener(ServerListPingEvent.class, event -> {
+            // Only modify LAN ping events
+            if (event.getPingType() == ServerListPingType.OPEN_TO_LAN) {
+                event.getStatus().setMotd("My Custom Server Name");
+                event.getStatus().setMaxPlayers(100);
+            }
+        });
+    }
+}
+```
+
+### Query Protocol
+
+The Query extra implements the GameSpy4 Query Protocol, allowing server query tools to retrieve server information:
+
+```java
+import net.minestom.server.extras.query.Query;
+
+public class QueryExample {
+    public void setupQuery() {
+        // Start query on default port (same as server port)
+        int port = Query.start();
+        System.out.println("Query listening on port: " + port);
+    }
+    
+    public void setupQueryOnCustomPort() {
+        // Start query on specific port
+        boolean success = Query.start(25566);
+        
+        if (success) {
+            System.out.println("Query started on port 25566");
+        }
+    }
+    
+    public void stopQuery() {
+        // Stop query server
+        boolean wasStopped = Query.stop();
+    }
+    
+    public void checkQueryStatus() {
+        if (Query.isStarted()) {
+            System.out.println("Query is running");
+        }
+    }
+}
+```
+
+<Info>
+Query is commonly used by server list websites and monitoring tools to retrieve server status without connecting as a player.
+</Info>
+
+#### Query Events
+
+Customize query responses with events:
+
+```java
+import net.minestom.server.extras.query.event.BasicQueryEvent;
+import net.minestom.server.extras.query.event.FullQueryEvent;
+
+public class CustomQueryResponses {
+    public void setupQueryEvents() {
+        GlobalEventHandler handler = MinecraftServer.getGlobalEventHandler();
+        
+        // Basic query response
+        handler.addListener(BasicQueryEvent.class, event -> {
+            var response = event.getQueryResponse();
+            // Customize the response
+            System.out.println("Basic query from: " + event.getSender());
+        });
+        
+        // Full query response (includes player list and plugins)
+        handler.addListener(FullQueryEvent.class, event -> {
+            var response = event.getQueryResponse();
+            // Add custom data to the response
+            System.out.println("Full query from: " + event.getSender());
+        });
+    }
+}
+```
+
+#### Query Response Types
+
+<Accordion title="Basic Query">
+Returns basic server information:
+- MOTD
+- Game type
+- Map name
+- Current player count
+- Max player count
+- Host port
+- Host IP
+</Accordion>
+
+<Accordion title="Full Query">
+Returns extended information:
+- All basic query fields
+- Server version
+- Plugin list
+- Player list
+- Custom key-value pairs
+</Accordion>
+
+### Mojang Authentication
+
+The Mojang authentication extra provides cryptographic utilities for online mode authentication:
+
+```java
+import net.minestom.server.extras.mojangAuth.MojangCrypt;
+import java.security.KeyPair;
+import java.security.PublicKey;
+import javax.crypto.SecretKey;
+
+public class AuthenticationExample {
+    public void generateServerKeys() {
+        // Generate RSA key pair for server
+        KeyPair keyPair = MojangCrypt.generateKeyPair();
+        
+        if (keyPair != null) {
+            PublicKey publicKey = keyPair.getPublic();
+            // Use for authentication
+        }
+    }
+    
+    public void createAuthenticationHash(String serverId, 
+                                        PublicKey publicKey, 
+                                        SecretKey secretKey) {
+        // Create hash for Mojang session server verification
+        byte[] hash = MojangCrypt.digestData(serverId, publicKey, secretKey);
+        
+        // This hash is sent to Mojang's session server
+        // to verify the player's identity
+    }
+}
+```
+
+<Note>
+Most users don't need to interact with `MojangCrypt` directly - Minestom handles authentication automatically when online mode is enabled.
+</Note>
+
+#### Online Mode Configuration
+
+Configure authentication via ServerFlags:
+
+```bash
+# Set custom authentication URL
+-Dminestom.auth.url=https://sessionserver.mojang.com/session/minecraft/hasJoined
+
+# Prevent proxy connections (VPN/proxy detection)
+-Dminestom.auth.prevent-proxy-connections=false
+```
+
+## Creating Reusable Components
+
+While Minestom doesn't have a formal extension system, you can create reusable components as libraries:
+
+### Creating a Minestom Library
+
+```kotlin
+// build.gradle.kts
+plugins {
+    kotlin("jvm") version "1.9.0"
+    `maven-publish`
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Add Minestom as a dependency
+    compileOnly("net.minestom:minestom-snapshots:1.0.0")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+            groupId = "com.mycompany"
+            artifactId = "my-minestom-library"
+            version = "1.0.0"
+        }
+    }
+}
+```
+
+### Example: Custom Game Library
+
+```java
+package com.mycompany.minestom.game;
+
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.entity.Player;
+import net.minestom.server.event.player.PlayerLoginEvent;
+
+public class GameFramework {
+    private final GameRegistry registry = new GameRegistry();
+    
+    public void initialize() {
+        MinecraftServer.getGlobalEventHandler()
+            .addListener(PlayerLoginEvent.class, this::onPlayerLogin);
+    }
+    
+    public void registerGame(Game game) {
+        registry.register(game);
+    }
+    
+    private void onPlayerLogin(PlayerLoginEvent event) {
+        Player player = event.getPlayer();
+        // Handle player joining a game
+    }
+}
+
+public interface Game {
+    String getId();
+    void onPlayerJoin(Player player);
+    void onPlayerLeave(Player player);
+    void tick();
+}
+```
+
+Others can then use your library:
+
+```java
+// In another project
+import com.mycompany.minestom.game.GameFramework;
+import com.mycompany.minestom.game.Game;
+
+public class MyServer {
+    public static void main(String[] args) {
+        MinecraftServer server = MinecraftServer.init();
+        
+        // Use the game framework
+        GameFramework framework = new GameFramework();
+        framework.initialize();
+        framework.registerGame(new MyCustomGame());
+        
+        server.start("0.0.0.0", 25565);
+    }
+}
+```
+
+<Tip>
+Publish your reusable Minestom libraries to Maven Central or JitPack so others can easily use them.
+</Tip>
+
+## Community Extensions
+
+The Minestom community has created various extension libraries:
+
+<CardGroup cols={2}>
+  <Card title="Minestom CE" icon="puzzle-piece">
+    Community extensions providing common features like world loading, inventory GUIs, and more.
+  </Card>
+  
+  <Card title="Polar" icon="snowflake">
+    A world loading and saving library for Minestom with support for Anvil format.
+  </Card>
+  
+  <Card title="Scaffolding" icon="hammer">
+    Utilities and helpers for building Minestom servers more quickly.
+  </Card>
+  
+  <Card title="Minestom Data" icon="database">
+    Data generators for creating Minecraft protocol data from the vanilla game.
+  </Card>
+</CardGroup>
+
+<Note>
+Check the [Minestom GitHub organization](https://github.com/Minestom) and community Discord for more community-created libraries.
+</Note>
+
+## Dependency Injection
+
+For larger projects, consider using dependency injection:
+
+### Using Guice
+
+```java
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.google.inject.AbstractModule;
+
+public class MinestomModule extends AbstractModule {
+    @Override
+    protected void configure() {
+        bind(CommandManager.class).asEagerSingleton();
+        bind(EventManager.class).asEagerSingleton();
+        bind(InstanceManager.class).asEagerSingleton();
+    }
+}
+
+public class DIServer {
+    public static void main(String[] args) {
+        MinecraftServer server = MinecraftServer.init();
+        
+        // Create injector
+        Injector injector = Guice.createInjector(new MinestomModule());
+        
+        // Get managed instances
+        CommandManager commands = injector.getInstance(CommandManager.class);
+        EventManager events = injector.getInstance(EventManager.class);
+        
+        server.start("0.0.0.0", 25565);
+    }
+}
+```
+
+## Configuration Management
+
+Manage configuration for your modular server:
+
+```java
+import com.electronwill.nightconfig.core.file.FileConfig;
+import com.electronwill.nightconfig.toml.TomlFormat;
+
+public class ConfigManager {
+    private final FileConfig config;
+    
+    public ConfigManager(String path) {
+        this.config = FileConfig.builder(path)
+            .defaultResource("/default-config.toml")
+            .build();
+        config.load();
+    }
+    
+    public int getInt(String path, int defaultValue) {
+        return config.getIntOrElse(path, defaultValue);
+    }
+    
+    public String getString(String path, String defaultValue) {
+        return config.getOrElse(path, defaultValue);
+    }
+}
+
+// Usage
+public class MyModule implements ServerModule {
+    private final ConfigManager config;
+    
+    public MyModule(ConfigManager config) {
+        this.config = config;
+    }
+    
+    @Override
+    public void initialize() {
+        int maxPlayers = config.getInt("server.max-players", 100);
+        String motd = config.getString("server.motd", "A Minestom Server");
+    }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Separation of Concerns" icon="layer-group">
+    Separate your game logic, commands, events, and data management into distinct modules.
+  </Card>
+  
+  <Card title="Use Interfaces" icon="plug">
+    Define clear interfaces for your modules to enable easy testing and swapping implementations.
+  </Card>
+  
+  <Card title="Configuration" icon="gear">
+    Make your modules configurable rather than hardcoding values.
+  </Card>
+  
+  <Card title="Testing" icon="flask">
+    Use Minestom's testing library to write tests for your modules.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing" href="/advanced/testing">
+    Learn how to test your custom modules
+  </Card>
+  <Card title="Performance" href="/advanced/performance">
+    Optimize your server for production
+  </Card>
+</CardGroup>

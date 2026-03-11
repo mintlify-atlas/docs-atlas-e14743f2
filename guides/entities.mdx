@@ -1,0 +1,329 @@
+---
+title: 'Entities'
+description: 'Learn how to create, spawn, and manage entities in Minestom'
+---
+
+Entities are the core moving objects in your Minestom server. This guide covers creating entities, spawning them, and implementing custom AI behavior.
+
+## Entity Types
+
+Minestom provides several entity classes:
+
+<CardGroup cols={3}>
+  <Card title="Entity" icon="cube">
+    Base class for all entities
+  </Card>
+  <Card title="LivingEntity" icon="heart">
+    Entities with health and AI
+  </Card>
+  <Card title="EntityCreature" icon="dragon">
+    Living entities with pathfinding
+  </Card>
+</CardGroup>
+
+## Creating Entities
+
+### Basic Entity Creation
+
+Create an entity by instantiating it with an `EntityType`:
+
+```java
+import net.minestom.server.entity.Entity;
+import net.minestom.server.entity.EntityType;
+import net.minestom.server.coordinate.Pos;
+
+// Create a zombie entity
+Entity zombie = new Entity(EntityType.ZOMBIE);
+
+// Create a living entity with health
+LivingEntity ghast = new LivingEntity(EntityType.HAPPY_GHAST);
+ghast.setNoGravity(true);
+```
+
+### EntityCreature for AI
+
+`EntityCreature` extends `LivingEntity` and provides AI and pathfinding capabilities:
+
+```java
+import net.minestom.server.entity.EntityCreature;
+import net.minestom.server.entity.ai.EntityAIGroup;
+import net.minestom.server.entity.ai.goal.*;
+
+// Create a creature with AI
+EntityCreature creature = new EntityCreature(EntityType.ZOMBIE);
+
+// Add AI goals
+EntityAIGroup aiGroup = new EntityAIGroup();
+aiGroup.getGoalSelectors().add(new RandomStrollGoal(creature, 15));
+aiGroup.getGoalSelectors().add(new MeleeAttackGoal(creature, 1.2, 20, TimeUnit.SERVER_TICK));
+
+creature.addAIGroup(aiGroup);
+```
+
+## Spawning Entities
+
+<Steps>
+  <Step title="Create the entity">
+    Instantiate your entity with the desired `EntityType`.
+  </Step>
+  
+  <Step title="Set instance and position">
+    Use `setInstance()` to spawn the entity in a world.
+  </Step>
+  
+  <Step title="Configure properties">
+    Set entity metadata, equipment, and behavior.
+  </Step>
+</Steps>
+
+### Spawning Example
+
+```java
+// Spawn entity in player's instance
+Player player = event.getPlayer();
+Instance instance = player.getInstance();
+
+// Create and spawn a copper golem
+LivingEntity copperGolem = new LivingEntity(EntityType.COPPER_GOLEM);
+copperGolem.setNoGravity(true);
+copperGolem.setItemInMainHand(ItemStack.of(Material.STICK));
+
+// Set metadata
+CopperGolemMeta meta = (CopperGolemMeta) copperGolem.getEntityMeta();
+meta.setState(CopperGolemMeta.State.GETTING_ITEM);
+
+// Spawn at position
+Pos spawnPos = new Pos(-10, 40, 5, -133, 0);
+copperGolem.setInstance(instance, spawnPos);
+```
+
+## Entity Properties
+
+### Position and Movement
+
+```java
+// Set position
+entity.teleport(new Pos(0, 40, 0));
+
+// Set velocity
+entity.setVelocity(new Vec(0, 10, 0));
+
+// Disable gravity
+entity.setNoGravity(true);
+
+// Enable/disable physics
+entity.setHasPhysics(false);
+```
+
+### Equipment and Items
+
+```java
+// Set items in hand
+entity.setItemInMainHand(ItemStack.of(Material.DIAMOND_SWORD));
+entity.setItemInOffHand(ItemStack.of(Material.SHIELD));
+
+// Set armor
+LivingEntity living = (LivingEntity) entity;
+living.setHelmet(ItemStack.of(Material.DIAMOND_HELMET));
+living.setChestplate(ItemStack.of(Material.DIAMOND_CHESTPLATE));
+living.setLeggings(ItemStack.of(Material.DIAMOND_LEGGINGS));
+living.setBoots(ItemStack.of(Material.DIAMOND_BOOTS));
+
+// Set body equipment
+living.setBodyEquipment(ItemStack.of(Material.GREEN_HARNESS));
+```
+
+### Entity Metadata
+
+```java
+import net.minestom.server.component.DataComponents;
+
+// Set custom name
+entity.set(DataComponents.CUSTOM_NAME, Component.text("Boss Entity"));
+
+// Access entity-specific metadata
+EntityMeta meta = entity.getEntityMeta();
+if (meta instanceof LivingEntityMeta livingMeta) {
+    livingMeta.setCustomNameVisible(true);
+}
+```
+
+## Entity Targeting and Combat
+
+### Setting Targets
+
+```java
+EntityCreature creature = new EntityCreature(EntityType.ZOMBIE);
+
+// Set target entity
+creature.setTarget(player);
+
+// Get current target
+Entity target = creature.getTarget();
+```
+
+### Attack Events
+
+```java
+import net.minestom.server.event.entity.EntityAttackEvent;
+
+// Listen for attacks
+eventNode.addListener(EntityAttackEvent.class, event -> {
+    Entity source = event.getEntity();
+    Entity target = event.getTarget();
+    
+    // Apply knockback
+    float yaw = source.getPosition().yaw();
+    target.takeKnockback(0.4f, 
+        Math.sin(yaw * 0.017453292), 
+        -Math.cos(yaw * 0.017453292));
+    
+    // Deal damage
+    if (target instanceof Player player) {
+        player.damage(Damage.fromEntity(source, 5));
+    }
+});
+
+// Creature attack method
+creature.attack(targetEntity, true); // true = swing hand
+```
+
+## Entity AI and Pathfinding
+
+### AI Groups
+
+```java
+EntityCreature creature = new EntityCreature(EntityType.ZOMBIE);
+
+// Create AI group
+EntityAIGroup aiGroup = new EntityAIGroup();
+
+// Add goals (executed in order of priority)
+aiGroup.getGoalSelectors().add(new MeleeAttackGoal(creature, 1.2, 20, TimeUnit.SERVER_TICK));
+aiGroup.getGoalSelectors().add(new RandomStrollGoal(creature, 15));
+
+creature.addAIGroup(aiGroup);
+```
+
+### Pathfinding
+
+```java
+import net.minestom.server.entity.pathfinding.Navigator;
+
+EntityCreature creature = new EntityCreature(EntityType.ZOMBIE);
+Navigator navigator = creature.getNavigator();
+
+// Navigate to position
+navigator.setPathTo(new Pos(100, 40, 100));
+
+// Navigate to entity
+navigator.setPathTo(targetEntity);
+```
+
+<Note>
+The `Navigator` automatically updates during the creature's tick cycle. You don't need to manually tick it.
+</Note>
+
+## Entity Removal
+
+### Immediate Removal
+
+```java
+// Remove entity immediately
+entity.remove();
+
+// Check if removed
+if (entity.isRemoved()) {
+    System.out.println("Entity has been removed");
+}
+```
+
+### Scheduled Removal
+
+```java
+import java.time.Duration;
+import net.minestom.server.utils.time.TimeUnit;
+
+// Schedule removal after delay
+entity.scheduleRemove(Duration.of(5, TimeUnit.SECOND));
+```
+
+### Death Animation
+
+```java
+@Override
+public void kill() {
+    super.kill();
+    
+    // Wait for death animation (1000ms minimum for particles)
+    if (removalAnimationDelay > 0) {
+        scheduleRemove(Duration.of(removalAnimationDelay, TimeUnit.MILLISECOND));
+    } else {
+        remove();
+    }
+}
+```
+
+## Player Entities
+
+Players are special entities with additional functionality. See the full Player API documentation for details on:
+
+- Inventory management (see [Inventories](/guides/inventories))
+- Command execution (see [Commands](/guides/commands))
+- Network packets (see [Networking](/guides/networking))
+
+## Complete Example
+
+Here's a complete example spawning a custom entity with AI:
+
+```java
+import net.minestom.server.entity.EntityCreature;
+import net.minestom.server.entity.EntityType;
+import net.minestom.server.entity.ai.EntityAIGroup;
+import net.minestom.server.entity.ai.goal.*;
+import net.minestom.server.coordinate.Pos;
+import net.minestom.server.instance.Instance;
+import net.minestom.server.item.ItemStack;
+import net.minestom.server.item.Material;
+import net.minestom.server.component.DataComponents;
+import net.kyori.adventure.text.Component;
+
+public class CustomEntity {
+    
+    public static EntityCreature spawnGuard(Instance instance, Pos position) {
+        // Create creature
+        EntityCreature guard = new EntityCreature(EntityType.ZOMBIE);
+        
+        // Configure properties
+        guard.set(DataComponents.CUSTOM_NAME, Component.text("Guard"));
+        guard.setItemInMainHand(ItemStack.of(Material.IRON_SWORD));
+        guard.setHelmet(ItemStack.of(Material.IRON_HELMET));
+        
+        // Add AI
+        EntityAIGroup aiGroup = new EntityAIGroup();
+        aiGroup.getGoalSelectors().add(
+            new MeleeAttackGoal(guard, 1.5, 10, TimeUnit.SERVER_TICK)
+        );
+        aiGroup.getGoalSelectors().add(
+            new RandomStrollGoal(guard, 20)
+        );
+        guard.addAIGroup(aiGroup);
+        
+        // Spawn in world
+        guard.setInstance(instance, position);
+        
+        return guard;
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="World Generation" icon="mountain" href="/guides/world-generation">
+    Learn how to generate worlds for entities to inhabit
+  </Card>
+  <Card title="Commands" icon="terminal" href="/guides/commands">
+    Create commands to spawn and manage entities
+  </Card>
+</CardGroup>

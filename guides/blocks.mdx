@@ -1,0 +1,421 @@
+---
+title: 'Blocks'
+description: 'Learn how to work with blocks, create custom block handlers, and implement placement rules'
+---
+
+Blocks are the building blocks of your Minestom world. This guide covers block manipulation, custom behavior, and placement rules.
+
+## Block Basics
+
+The `Block` interface represents an immutable block that can be placed in the world.
+
+### Getting and Setting Blocks
+
+```java
+import net.minestom.server.instance.Instance;
+import net.minestom.server.instance.block.Block;
+import net.minestom.server.coordinate.Pos;
+
+// Get block at position
+Block block = instance.getBlock(10, 40, 10);
+
+// Set block at position
+instance.setBlock(10, 40, 10, Block.STONE);
+
+// Set block with position object
+Pos pos = new Pos(10, 40, 10);
+instance.setBlock(pos, Block.DIAMOND_BLOCK);
+```
+
+### Block Properties
+
+Blocks can have properties that define their state:
+
+```java
+// Get a property
+String facing = block.getProperty("facing");
+String open = block.getProperty("open");
+
+// Set a property (returns new block)
+Block newBlock = block.withProperty("facing", "north");
+Block openDoor = block.withProperty("open", "true");
+
+// Set multiple properties
+Map<String, String> properties = Map.of(
+    "facing", "south",
+    "open", "true",
+    "half", "upper"
+);
+Block configured = block.withProperties(properties);
+
+instance.setBlock(pos, configured);
+```
+
+<Note>
+Blocks are immutable. Methods like `withProperty()` return a new `Block` instance.
+</Note>
+
+### Block States
+
+```java
+// Get block state ID
+int stateId = block.stateId();
+
+// Create block from state
+Block fromState = Block.fromState("minecraft:chest[facing=north,type=single]");
+
+// Get full state string
+String state = block.state();
+```
+
+## Block Handlers
+
+`BlockHandler` allows you to add custom behavior to blocks. Handlers are called when blocks are placed, destroyed, or interacted with.
+
+### Creating a Block Handler
+
+```java
+import net.kyori.adventure.key.Key;
+import net.minestom.server.instance.block.BlockHandler;
+
+public class TestBlockHandler implements BlockHandler {
+    
+    @Override
+    public Key getKey() {
+        return Key.key("minestom", "test");
+    }
+    
+    @Override
+    public void onPlace(Placement placement) {
+        System.out.println("Block placed at: " + placement.getBlockPosition());
+        System.out.println("Previous block: " + placement.getPreviousBlock());
+    }
+    
+    @Override
+    public void onDestroy(Destroy destroy) {
+        System.out.println("Block destroyed at: " + destroy.getBlockPosition());
+        System.out.println("Replaced with: " + destroy.getNewBlock());
+    }
+    
+    @Override
+    public boolean onInteract(Interaction interaction) {
+        Player player = interaction.getPlayer();
+        player.sendMessage("You clicked the custom block!");
+        return true; // Return false to cancel interaction
+    }
+}
+```
+
+### Registering Block Handlers
+
+```java
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.instance.block.BlockManager;
+
+BlockManager blockManager = MinecraftServer.getBlockManager();
+
+// Register handler instance
+TestBlockHandler handler = new TestBlockHandler();
+blockManager.registerHandler(handler.getKey(), () -> handler);
+
+// Register for specific blocks
+blockManager.registerHandler("minecraft:diamond_block", () -> handler);
+```
+
+### Applying Handlers to Blocks
+
+```java
+// Attach handler when placing block
+Block block = Block.STONE.withHandler(handler);
+instance.setBlock(pos, block);
+
+// Or attach during placement event
+eventNode.addListener(PlayerBlockPlaceEvent.class, event -> {
+    Block block = event.getBlock();
+    BlockHandler handler = block.handler();
+    
+    if (handler == null) {
+        // Get handler from BlockManager
+        handler = MinecraftServer.getBlockManager()
+            .getHandler(block.key().asString());
+        event.setBlock(block.withHandler(handler));
+    }
+});
+```
+
+## Advanced Block Handler Features
+
+### Tickable Blocks
+
+Create blocks that update over time:
+
+```java
+public class TickingBlockHandler implements BlockHandler {
+    
+    @Override
+    public Key getKey() {
+        return Key.key("minestom", "ticking_block");
+    }
+    
+    @Override
+    public boolean isTickable() {
+        return true;
+    }
+    
+    @Override
+    public void tick(Tick tick) {
+        Block block = tick.getBlock();
+        Instance instance = tick.getInstance();
+        Point pos = tick.getBlockPosition();
+        
+        // Update block state or perform actions
+        System.out.println("Ticking at: " + pos);
+    }
+}
+```
+
+### Entity Touch Detection
+
+```java
+@Override
+public void onTouch(Touch touch) {
+    Entity touching = touch.getTouching();
+    Point blockPos = touch.getBlockPosition();
+    
+    if (touching instanceof Player player) {
+        player.sendMessage("You touched a special block!");
+    }
+}
+```
+
+### Block Entity Tags
+
+```java
+import net.minestom.server.tag.Tag;
+
+@Override
+public Collection<Tag<?>> getBlockEntityTags() {
+    return List.of(
+        Tag.String("CustomData"),
+        Tag.Integer("Energy")
+    );
+}
+
+@Override
+public byte getBlockEntityAction() {
+    return 1; // Action ID for block entity
+}
+```
+
+## Block Placement Rules
+
+Placement rules control how blocks can be placed in the world.
+
+### Creating a Placement Rule
+
+```java
+import net.minestom.server.instance.block.BlockFace;
+import net.minestom.server.instance.block.rule.BlockPlacementRule;
+
+public class DripstonePlacementRule extends BlockPlacementRule {
+    
+    public DripstonePlacementRule() {
+        super(Block.POINTED_DRIPSTONE);
+    }
+    
+    @Override
+    public Block blockPlace(PlacementState state) {
+        BlockFace face = state.blockFace();
+        
+        // Set vertical direction based on placement face
+        if (face == BlockFace.TOP) {
+            return state.block().withProperty("vertical_direction", "up");
+        } else if (face == BlockFace.BOTTOM) {
+            return state.block().withProperty("vertical_direction", "down");
+        }
+        
+        return state.block();
+    }
+}
+```
+
+### Bed Placement Rule Example
+
+From the Minestom demo - shows complex multi-block placement:
+
+```java
+public class BedPlacementRule extends BlockPlacementRule {
+    
+    public BedPlacementRule(Block block) {
+        super(block);
+    }
+    
+    @Override
+    public Block blockPlace(PlacementState placementState) {
+        Player player = placementState.player();
+        if (player == null) return placementState.block();
+        
+        BlockFace playerFacing = player.getPosition().direction().toBlockFace();
+        Block placedBlock = placementState.block()
+            .withProperty("facing", playerFacing.name().toLowerCase())
+            .withProperty("part", "foot");
+        
+        // Place head part
+        Point headPos = placementState.placePosition()
+            .add(playerFacing.toDirection().vec().asPos());
+        Block headBlock = placementState.block()
+            .withProperty("facing", playerFacing.name().toLowerCase())
+            .withProperty("part", "head");
+        
+        placementState.instance().setBlock(headPos, headBlock);
+        
+        return placedBlock;
+    }
+}
+```
+
+### Registering Placement Rules
+
+```java
+BlockManager blockManager = MinecraftServer.getBlockManager();
+
+// Register for single block
+blockManager.registerBlockPlacementRule(new DripstonePlacementRule());
+
+// Register for multiple blocks
+var beds = Block.values().stream()
+    .filter(block -> BlockEntityType.BED.equals(block.registry().blockEntityType()))
+    .toList();
+    
+beds.forEach(block -> 
+    blockManager.registerBlockPlacementRule(new BedPlacementRule(block))
+);
+```
+
+## Block Events
+
+Handle block-related events:
+
+```java
+import net.minestom.server.event.player.*;
+
+// Block placement
+eventNode.addListener(PlayerBlockPlaceEvent.class, event -> {
+    Player player = event.getPlayer();
+    Block block = event.getBlock();
+    Point pos = event.getBlockPosition();
+    
+    player.sendMessage("Placed " + block.key().asString());
+});
+
+// Block breaking
+eventNode.addListener(PlayerBlockBreakEvent.class, event -> {
+    Block block = event.getBlock();
+    Point pos = event.getBlockPosition();
+    
+    // Handle multi-block structures (like beds)
+    if (block.getProperty("part") != null) {
+        // Break both parts
+        handleMultiBlockBreak(event);
+    }
+});
+
+// Block interaction
+eventNode.addListener(PlayerBlockInteractEvent.class, event -> {
+    Block block = event.getBlock();
+    Player player = event.getPlayer();
+    
+    // Toggle door
+    String open = block.getProperty("open");
+    if (open != null) {
+        block = block.withProperty("open", 
+            String.valueOf(!Boolean.parseBoolean(open)));
+        event.getInstance().setBlock(event.getBlockPosition(), block);
+    }
+});
+```
+
+## Block Tags and NBT
+
+### Using Tags
+
+```java
+import net.minestom.server.tag.Tag;
+
+// Create tag
+Tag<String> customTag = Tag.String("custom_data");
+
+// Set tag on block
+Block block = Block.CHEST.withTag(customTag, "my data");
+instance.setBlock(pos, block);
+
+// Read tag
+String data = block.getTag(customTag);
+```
+
+### NBT Data
+
+```java
+import net.kyori.adventure.nbt.CompoundBinaryTag;
+
+// Create NBT data
+CompoundBinaryTag nbt = CompoundBinaryTag.builder()
+    .putString("CustomName", "Special Chest")
+    .putInt("Items", 5)
+    .build();
+
+// Apply to block
+Block block = Block.CHEST.withNbt(nbt);
+instance.setBlock(pos, block);
+
+// Read NBT
+CompoundBinaryTag blockNbt = block.nbt();
+```
+
+## Complete Example: Sign Handler
+
+Here's the sign handler from the Minestom demo:
+
+```java
+import net.kyori.adventure.key.Key;
+import net.minestom.server.instance.block.BlockHandler;
+
+public class SignHandler implements BlockHandler {
+    
+    @Override
+    public Key getKey() {
+        return Key.key("minestom", "sign");
+    }
+    
+    @Override
+    public void onPlace(Placement placement) {
+        System.out.println("Sign placed at: " + placement.getBlockPosition());
+    }
+    
+    @Override
+    public void onDestroy(Destroy destroy) {
+        System.out.println("Sign destroyed at: " + destroy.getBlockPosition());
+    }
+}
+
+// Register for all sign types
+BlockManager blockManager = MinecraftServer.getBlockManager();
+RegistryTag<Block> signTag = Block.staticRegistry()
+    .getTag(TagKey.ofHash("#minecraft:all_signs"));
+
+SignHandler signHandler = new SignHandler();
+for (RegistryKey<Block> key : signTag) {
+    blockManager.registerHandler(key.key(), () -> signHandler);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="World Generation" icon="mountain" href="/guides/world-generation">
+    Generate terrain with custom blocks
+  </Card>
+  <Card title="Commands" icon="terminal" href="/guides/commands">
+    Create commands to manipulate blocks
+  </Card>
+</CardGroup>

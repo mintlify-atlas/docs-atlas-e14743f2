@@ -1,0 +1,693 @@
+---
+title: Testing
+description: Write reliable integration tests for your Minestom server using the built-in testing library
+---
+
+## Testing Library
+
+Minestom provides a dedicated testing library that makes it easy to write integration tests for your server code. The library is available as a separate module: `net.minestom:minestom-testing`.
+
+### Adding the Testing Dependency
+
+Add the testing library to your build configuration:
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    testImplementation("net.minestom:minestom-testing:1.0.0")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.0")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.0")
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+```
+
+```groovy
+// build.gradle
+dependencies {
+    testImplementation 'net.minestom:minestom-testing:1.0.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+}
+
+test {
+    useJUnitPlatform()
+}
+```
+
+<Info>
+The Minestom testing library is built on JUnit 5 and provides a custom test extension for managing server lifecycle.
+</Info>
+
+## Basic Test Structure
+
+The foundation of Minestom testing is the `@EnvTest` annotation and the `Env` interface:
+
+```java
+import net.minestom.testing.Env;
+import net.minestom.testing.EnvTest;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@EnvTest
+public class MyFirstTest {
+    
+    @Test
+    public void testBasicServer(Env env) {
+        // The Env parameter is automatically injected
+        // It provides access to a test server instance
+        assertNotNull(env.process());
+    }
+}
+```
+
+<Note>
+The `@EnvTest` annotation automatically sets up and tears down a Minestom server for each test class. Each test method receives an `Env` instance.
+</Note>
+
+## The Env Interface
+
+The `Env` interface is your primary tool for interacting with the test environment:
+
+### Creating Test Instances
+
+```java
+import net.minestom.server.instance.Instance;
+import net.minestom.server.instance.block.Block;
+
+@EnvTest
+public class InstanceTest {
+    
+    @Test
+    public void testFlatInstance(Env env) {
+        // Create a flat instance filled with stone
+        Instance instance = env.createFlatInstance();
+        
+        assertNotNull(instance);
+        assertEquals(Block.STONE, instance.getBlock(0, 0, 0));
+    }
+    
+    @Test
+    public void testEmptyInstance(Env env) {
+        // Create a completely empty instance
+        Instance instance = env.createEmptyInstance();
+        
+        assertNotNull(instance);
+        assertEquals(Block.AIR, instance.getBlock(0, 0, 0));
+    }
+    
+    @Test
+    public void testCustomGenerator(Env env) {
+        // Create instance with custom generator
+        Instance instance = env.createFlatInstance(chunkLoader);
+        instance.setGenerator(unit -> {
+            unit.modifier().fillHeight(0, 10, Block.GRASS_BLOCK);
+        });
+        
+        // Load a chunk to trigger generation
+        instance.loadChunk(0, 0).join();
+        
+        assertEquals(Block.GRASS_BLOCK, instance.getBlock(0, 5, 0));
+    }
+    
+    @Test
+    public void testCleanup(Env env) {
+        Instance instance = env.createEmptyInstance();
+        
+        // Do testing...
+        
+        // Clean up the instance when done
+        env.destroyInstance(instance);
+    }
+}
+```
+
+### Creating Test Players
+
+```java
+import net.minestom.server.entity.Player;
+import net.minestom.server.coordinate.Pos;
+import net.minestom.testing.TestConnection;
+
+@EnvTest
+public class PlayerTest {
+    
+    @Test
+    public void testPlayerCreation(Env env) {
+        Instance instance = env.createFlatInstance();
+        
+        // Create a player at specific position
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        assertNotNull(player);
+        assertEquals(42, player.getPosition().y());
+        assertEquals(instance, player.getInstance());
+    }
+    
+    @Test
+    public void testCustomConnection(Env env) {
+        // Create a connection with custom profile
+        TestConnection connection = env.createConnection(
+            new GameProfile(UUID.randomUUID(), "TestPlayer")
+        );
+        
+        Instance instance = env.createFlatInstance();
+        Player player = connection.connect(instance, new Pos(0, 42, 0));
+        
+        assertEquals("TestPlayer", player.getUsername());
+    }
+    
+    @Test
+    public void testMultiplePlayers(Env env) {
+        Instance instance = env.createFlatInstance();
+        
+        Player player1 = env.createPlayer(instance, new Pos(0, 42, 0));
+        Player player2 = env.createPlayer(instance, new Pos(10, 42, 10));
+        
+        assertEquals(2, instance.getPlayers().size());
+    }
+}
+```
+
+## Test Connections
+
+`TestConnection` objects represent fake clients that can interact with your server:
+
+```java
+import net.minestom.server.network.packet.server.play.ChunkDataPacket;
+import net.minestom.testing.Collector;
+
+@EnvTest
+public class ConnectionTest {
+    
+    @Test
+    public void testPacketTracking(Env env) {
+        Instance instance = env.createFlatInstance();
+        TestConnection connection = env.createConnection();
+        
+        // Track incoming packets of a specific type
+        Collector<ChunkDataPacket> packets = connection.trackIncoming(ChunkDataPacket.class);
+        
+        // Connect player (this will trigger chunk packets)
+        Player player = connection.connect(instance, new Pos(0, 42, 0));
+        
+        // Tick the server to process packets
+        env.tick();
+        
+        // Verify packets were received
+        packets.assertAny(); // At least one packet
+    }
+    
+    @Test
+    public void testAllPackets(Env env) {
+        Instance instance = env.createFlatInstance();
+        TestConnection connection = env.createConnection();
+        
+        // Track all incoming packets
+        Collector<ServerPacket> packets = connection.trackIncoming();
+        
+        Player player = connection.connect(instance, new Pos(0, 42, 0));
+        env.tick();
+        
+        // Many packets should be sent on join
+        packets.assertAny();
+    }
+}
+```
+
+## Collectors
+
+Collectors are powerful tools for gathering and asserting on collected data:
+
+```java
+import net.minestom.testing.Collector;
+
+@EnvTest
+public class CollectorTest {
+    
+    @Test
+    public void testCollectorAssertions(Env env) {
+        Instance instance = env.createFlatInstance();
+        TestConnection connection = env.createConnection();
+        
+        Collector<ChunkDataPacket> packets = connection.trackIncoming(ChunkDataPacket.class);
+        Player player = connection.connect(instance, new Pos(0, 42, 0));
+        env.tick();
+        
+        // Assert exactly one packet
+        packets.assertSingle();
+        
+        // Assert specific count
+        packets.assertCount(1);
+        
+        // Assert at least one
+        packets.assertAny();
+        
+        // Assert empty
+        Collector<SomeOtherPacket> empty = connection.trackIncoming(SomeOtherPacket.class);
+        empty.assertEmpty();
+    }
+    
+    @Test
+    public void testCollectorPredicates(Env env) {
+        Instance instance = env.createFlatInstance();
+        TestConnection connection = env.createConnection();
+        
+        Collector<ChunkDataPacket> packets = connection.trackIncoming(ChunkDataPacket.class);
+        Player player = connection.connect(instance, new Pos(0, 42, 0));
+        env.tick();
+        
+        // Assert at least one matches predicate
+        packets.assertAnyMatch(packet -> 
+            packet.chunkX() == 0 && packet.chunkZ() == 0
+        );
+        
+        // Assert none match predicate
+        packets.assertNoneMatch(packet -> 
+            packet.chunkX() == 999
+        );
+        
+        // Assert all match predicate
+        packets.assertAllMatch(packet -> 
+            packet.chunkX() >= -10 && packet.chunkX() <= 10
+        );
+    }
+    
+    @Test
+    public void testCollectorConsumer(Env env) {
+        Instance instance = env.createFlatInstance();
+        TestConnection connection = env.createConnection();
+        
+        Collector<ChunkDataPacket> packets = connection.trackIncoming(ChunkDataPacket.class);
+        Player player = connection.connect(instance, new Pos(0, 42, 0));
+        env.tick();
+        
+        // Assert single packet and inspect it
+        packets.assertSingle(packet -> {
+            assertEquals(0, packet.chunkX());
+            assertEquals(0, packet.chunkZ());
+        });
+    }
+}
+```
+
+## Event Testing
+
+Test that your code properly handles and fires events:
+
+```java
+import net.minestom.server.event.player.PlayerMoveEvent;
+import net.minestom.server.event.EventFilter;
+import net.minestom.testing.Collector;
+
+@EnvTest
+public class EventTest {
+    
+    @Test
+    public void testPlayerMoveEvent(Env env) {
+        Instance instance = env.createFlatInstance();
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        // Track events for a specific player
+        Collector<PlayerMoveEvent> events = env.trackEvent(
+            PlayerMoveEvent.class,
+            EventFilter.PLAYER,
+            player
+        );
+        
+        // Move the player
+        player.teleport(new Pos(10, 42, 10));
+        env.tick();
+        
+        // Verify event was fired
+        events.assertSingle(event -> {
+            assertEquals(player, event.getPlayer());
+            assertEquals(10, event.getNewPosition().x());
+        });
+    }
+    
+    @Test
+    public void testCustomEvent(Env env) {
+        Instance instance = env.createFlatInstance();
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        // Track custom event
+        Collector<MyCustomEvent> events = env.trackEvent(
+            MyCustomEvent.class,
+            EventFilter.PLAYER,
+            player
+        );
+        
+        // Trigger the event
+        EventDispatcher.call(new MyCustomEvent(player));
+        
+        events.assertSingle();
+    }
+}
+```
+
+## Flexible Event Listeners
+
+For more complex event testing, use `FlexibleListener`:
+
+```java
+import net.minestom.testing.FlexibleListener;
+import net.minestom.server.event.player.PlayerBlockBreakEvent;
+
+@EnvTest
+public class FlexibleListenerTest {
+    
+    @Test
+    public void testEventModification(Env env) {
+        Instance instance = env.createFlatInstance();
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        // Create a flexible listener
+        FlexibleListener<PlayerBlockBreakEvent> listener = 
+            env.listen(PlayerBlockBreakEvent.class);
+        
+        // Modify events
+        listener.on(event -> {
+            // Cancel all block breaks
+            event.setCancelled(true);
+        });
+        
+        // Trigger block break
+        // ... your block break logic ...
+        
+        // The event will be cancelled by the listener
+    }
+}
+```
+
+## Server Ticking
+
+Control server ticking in your tests:
+
+```java
+@EnvTest
+public class TickingTest {
+    
+    @Test
+    public void testManualTick(Env env) {
+        Instance instance = env.createFlatInstance();
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        // Apply velocity to player
+        player.setVelocity(new Vec(1, 0, 0));
+        
+        // Tick the server once
+        env.tick();
+        
+        // Player should have moved
+        assertTrue(player.getPosition().x() > 0);
+    }
+    
+    @Test
+    public void testTickWhile(Env env) {
+        Instance instance = env.createFlatInstance();
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        player.setVelocity(new Vec(1, 0, 0));
+        
+        // Tick until condition is met or timeout
+        boolean completed = env.tickWhile(
+            () -> player.getPosition().x() < 10,
+            Duration.ofSeconds(5)
+        );
+        
+        assertTrue(completed);
+        assertTrue(player.getPosition().x() >= 10);
+    }
+    
+    @Test
+    public void testTimeout(Env env) {
+        Instance instance = env.createFlatInstance();
+        
+        // This will timeout because condition never becomes false
+        boolean completed = env.tickWhile(
+            () -> true,
+            Duration.ofMillis(100)
+        );
+        
+        assertFalse(completed); // Timed out
+    }
+}
+```
+
+## Testing Utilities
+
+The testing library includes useful assertion utilities:
+
+```java
+import net.minestom.testing.TestUtils;
+import net.minestom.server.coordinate.Point;
+import net.kyori.adventure.nbt.CompoundBinaryTag;
+
+@EnvTest
+public class UtilityTest {
+    
+    @Test
+    public void testPointEquality(Env env) {
+        Point p1 = new Pos(10.5, 42.0, -5.5);
+        Point p2 = new Pos(10.5, 42.0, -5.5);
+        
+        // Assert points are equal
+        TestUtils.assertPoint(p1, p2);
+    }
+    
+    @Test
+    public void testCollectionOrder(Env env) {
+        List<String> list1 = List.of("a", "b", "c");
+        List<String> list2 = List.of("c", "b", "a");
+        
+        // Assert collections have same elements, ignore order
+        TestUtils.assertEqualsIgnoreOrder(list1, list2);
+    }
+    
+    @Test
+    public void testSNBT(Env env) {
+        CompoundBinaryTag nbt = CompoundBinaryTag.builder()
+            .putString("name", "test")
+            .putInt("value", 42)
+            .build();
+        
+        // Assert NBT matches SNBT string
+        TestUtils.assertEqualsSNBT("{name:'test',value:42}", nbt);
+    }
+    
+    @Test
+    public void testIgnoreSpaces(Env env) {
+        String s1 = "hello   world";
+        String s2 = "hello world";
+        
+        // Assert strings are equal ignoring extra spaces
+        TestUtils.assertEqualsIgnoreSpace(s1, s2);
+    }
+}
+```
+
+## Complete Example: Testing a Game Mode
+
+```java
+import net.minestom.testing.Env;
+import net.minestom.testing.EnvTest;
+import net.minestom.server.entity.Player;
+import net.minestom.server.instance.Instance;
+import net.minestom.server.coordinate.Pos;
+import net.minestom.testing.Collector;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@EnvTest
+public class SurvivalGameModeTest {
+    
+    @Test
+    public void testPlayerJoinGame(Env env) {
+        // Setup
+        Instance instance = env.createFlatInstance();
+        SurvivalGame game = new SurvivalGame(instance);
+        
+        // Create player
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        
+        // Player joins game
+        game.addPlayer(player);
+        env.tick();
+        
+        // Verify player is in game
+        assertTrue(game.hasPlayer(player));
+        assertEquals(GameMode.SURVIVAL, player.getGameMode());
+    }
+    
+    @Test
+    public void testPlayerRespawn(Env env) {
+        // Setup
+        Instance instance = env.createFlatInstance();
+        SurvivalGame game = new SurvivalGame(instance);
+        Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+        game.addPlayer(player);
+        
+        // Track respawn event
+        Collector<PlayerRespawnEvent> events = env.trackEvent(
+            PlayerRespawnEvent.class,
+            EventFilter.PLAYER,
+            player
+        );
+        
+        // Kill player
+        player.kill();
+        env.tick();
+        
+        // Verify respawn
+        events.assertSingle();
+        assertTrue(player.isAlive());
+    }
+    
+    @Test
+    public void testGameTimer(Env env) {
+        // Setup
+        Instance instance = env.createFlatInstance();
+        SurvivalGame game = new SurvivalGame(instance);
+        game.setDuration(Duration.ofSeconds(10));
+        
+        // Start game
+        game.start();
+        
+        // Tick until game ends
+        boolean ended = env.tickWhile(
+            () -> !game.isEnded(),
+            Duration.ofSeconds(15)
+        );
+        
+        assertTrue(ended);
+        assertTrue(game.isEnded());
+    }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Test Isolation" icon="flask">
+    Each test gets a fresh server instance. Don't rely on state from other tests.
+  </Card>
+  
+  <Card title="Clean Up" icon="broom">
+    Destroy instances you create to prevent memory leaks in your test suite.
+  </Card>
+  
+  <Card title="Use Collectors" icon="box">
+    Collectors provide powerful assertions for events and packets.
+  </Card>
+  
+  <Card title="Tick Appropriately" icon="clock">
+    Remember to tick the server after actions that need processing.
+  </Card>
+</CardGroup>
+
+## Common Testing Patterns
+
+### Testing Block Placement
+
+```java
+@Test
+public void testBlockPlacement(Env env) {
+    Instance instance = env.createFlatInstance();
+    Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+    
+    // Place block
+    instance.setBlock(5, 42, 5, Block.STONE);
+    env.tick();
+    
+    // Verify block placement
+    assertEquals(Block.STONE, instance.getBlock(5, 42, 5));
+}
+```
+
+### Testing Commands
+
+```java
+@Test
+public void testCustomCommand(Env env) {
+    Instance instance = env.createFlatInstance();
+    Player player = env.createPlayer(instance, new Pos(0, 42, 0));
+    
+    // Register command
+    CommandManager commandManager = env.process().command();
+    commandManager.register(new TeleportCommand());
+    
+    // Execute command
+    commandManager.execute(player, "/teleport 10 50 10");
+    env.tick();
+    
+    // Verify result
+    TestUtils.assertPoint(new Pos(10, 50, 10), player.getPosition());
+}
+```
+
+### Testing Async Operations
+
+```java
+@Test
+public void testAsyncChunkLoad(Env env) {
+    Instance instance = env.createEmptyInstance();
+    
+    // Load chunk asynchronously
+    CompletableFuture<Chunk> future = instance.loadChunk(0, 0);
+    
+    // Wait for completion
+    Chunk chunk = future.join();
+    
+    assertNotNull(chunk);
+    assertTrue(chunk.isLoaded());
+}
+```
+
+## Integration with CI/CD
+
+### GitHub Actions Example
+
+```yaml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      
+      - name: Run tests
+        run: ./gradlew test
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: build/test-results/
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Performance" href="/advanced/performance">
+    Learn how to benchmark your code
+  </Card>
+  <Card title="Extensions" href="/advanced/extensions">
+    Create testable modular extensions
+  </Card>
+</CardGroup>

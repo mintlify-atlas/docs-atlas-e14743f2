@@ -1,0 +1,194 @@
+---
+title: Installation
+description: Learn how to add Minestom to your project using Gradle or Maven
+---
+
+Minestom is a Java library available on Maven Central. Unlike traditional Minecraft server platforms like Bukkit or Spigot, Minestom is added as a dependency to your project, giving you complete control over your server implementation.
+
+## Requirements
+
+- Java 21 or higher
+- Gradle or Maven build tool
+- Basic understanding of Java programming
+
+<Warning>
+  Minestom is a developer API, not an end-user server. It does not implement Bukkit, Forge, or Sponge APIs. You'll need to write your own server logic.
+</Warning>
+
+## Maven Central (Stable Releases)
+
+The recommended way to use Minestom is through stable releases published on Maven Central.
+
+<CodeGroup>
+
+```kotlin Gradle (Kotlin DSL)
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("net.minestom:minestom:1.21.11-rv2")
+}
+```
+
+```groovy Gradle (Groovy DSL)
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'net.minestom:minestom:1.21.11-rv2'
+}
+```
+
+```xml Maven
+<dependencies>
+    <dependency>
+        <groupId>net.minestom</groupId>
+        <artifactId>minestom</artifactId>
+        <version>1.21.11-rv2</version>
+    </dependency>
+</dependencies>
+```
+
+</CodeGroup>
+
+<Tip>
+  Check the [Maven Central repository](https://mvnrepository.com/artifact/net.minestom/minestom) for the latest version number.
+</Tip>
+
+## Testing Library (Optional)
+
+Minestom provides an integration testing library that's useful for writing tests for your server implementation.
+
+<CodeGroup>
+
+```kotlin Gradle (Kotlin DSL)
+dependencies {
+    implementation("net.minestom:minestom:1.21.11-rv2")
+    testImplementation("net.minestom:testing:1.21.11-rv2")
+}
+```
+
+```groovy Gradle (Groovy DSL)
+dependencies {
+    implementation 'net.minestom:minestom:1.21.11-rv2'
+    testImplementation 'net.minestom:testing:1.21.11-rv2'
+}
+```
+
+```xml Maven
+<dependencies>
+    <dependency>
+        <groupId>net.minestom</groupId>
+        <artifactId>minestom</artifactId>
+        <version>1.21.11-rv2</version>
+    </dependency>
+    <dependency>
+        <groupId>net.minestom</groupId>
+        <artifactId>testing</artifactId>
+        <version>1.21.11-rv2</version>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+
+</CodeGroup>
+
+## Snapshot Versions (Development)
+
+Pull request branches tagged with "Publish Pull Request" are automatically published to the Maven Central snapshot repository. This allows you to test new features before they're officially released.
+
+<Warning>
+  Snapshot versions are unstable and should only be used for testing new features. They may contain bugs or breaking changes.
+</Warning>
+
+<CodeGroup>
+
+```kotlin Gradle (Kotlin DSL)
+repositories {
+    maven(url = "https://central.sonatype.com/repository/maven-snapshots/") {
+        content {
+            includeModule("net.minestom", "minestom")
+            includeModule("net.minestom", "testing")
+        }
+    }
+    mavenCentral()
+}
+
+dependencies {
+    implementation("net.minestom:minestom:<branch>-SNAPSHOT")
+    testImplementation("net.minestom:testing:<branch>-SNAPSHOT")
+}
+```
+
+```groovy Gradle (Groovy DSL)
+repositories {
+    maven {
+        url 'https://central.sonatype.com/repository/maven-snapshots/'
+        content {
+            includeModule 'net.minestom', 'minestom'
+            includeModule 'net.minestom', 'testing'
+        }
+    }
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'net.minestom:minestom:<branch>-SNAPSHOT'
+    testImplementation 'net.minestom:testing:<branch>-SNAPSHOT'
+}
+```
+
+```xml Maven
+<repositories>
+    <repository>
+        <id>sonatype-snapshots</id>
+        <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+    </repository>
+</repositories>
+
+<dependencies>
+    <dependency>
+        <groupId>net.minestom</groupId>
+        <artifactId>minestom</artifactId>
+        <version>&lt;branch&gt;-SNAPSHOT</version>
+    </dependency>
+</dependencies>
+```
+
+</CodeGroup>
+
+Replace `<branch>` with the name of the pull request branch (e.g., `1_21_6-SNAPSHOT`).
+
+### Pinning Snapshot Versions
+
+By default, snapshot versions always resolve to the latest build. This can cause inconsistency between developers if Gradle has cached an older version (default 24 hours).
+
+To pin a specific snapshot build, you can reference the exact build number:
+
+```kotlin
+dependencies {
+    implementation("net.minestom:minestom:1_21_6-20250707.141325-4")
+}
+```
+
+Find the pinnable version:
+- In the `maven-metadata.xml` file, combine `snapshot.timestamp` and `snapshot.buildNumber`
+- In IntelliJ IDEA's "External Libraries" section, expand the `-SNAPSHOT` jar to see the pinnable version
+
+## Next Steps
+
+Now that you have Minestom added to your project, you're ready to create your first server!
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Build your first Minestom server in minutes
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/core-concepts/architecture">
+    Learn about instances, blocks, entities, and more
+  </Card>
+</CardGroup>

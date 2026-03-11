@@ -1,0 +1,546 @@
+---
+title: Event System
+description: Master Minestom's powerful and flexible event system
+---
+
+## Overview
+
+Minestom's event system is built around a hierarchical graph structure using `EventNode`, providing powerful filtering, organization, and performance optimization capabilities.
+
+<Info>
+Events in Minestom flow through a tree of EventNodes, each able to filter and handle events based on type, conditions, or handler properties.
+</Info>
+
+## Core Concepts
+
+### EventNode
+
+An `EventNode` is a node in the event graph that can:
+- **Filter events** by type and conditions
+- **Contain child nodes** for hierarchical organization
+- **Hold listeners** that execute when events pass filters
+
+```java EventNode.java:25-26
+public sealed interface EventNode<T extends Event> permits EventNodeImpl {
+    // ... node methods
+}
+```
+
+### EventListener
+
+An `EventListener` is a handler that executes when an event matches:
+
+```java EventListener.java:21-26
+public interface EventListener<T extends Event> {
+    Class<T> eventType();
+    Result run(T event);
+}
+```
+
+### Event Flow
+
+When an event is called:
+1. **Starts at root node** (Global Event Handler)
+2. **Filters through nodes** based on their conditions
+3. **Propagates to children** if filters pass
+4. **Executes listeners** at each matching node
+
+## Creating Event Nodes
+
+### All Events Node
+
+Accepts any event type:
+
+```java EventNode.java:34-36
+EventNode<Event> node = EventNode.all("my-node");
+```
+
+### Type-Filtered Node
+
+Only accepts events of a specific type:
+
+```java EventNode.java:52-56
+// Only player events
+EventNode<PlayerEvent> playerNode = EventNode.type("players", EventFilter.PLAYER);
+
+// Only entity events
+EventNode<EntityEvent> entityNode = EventNode.type("entities", EventFilter.ENTITY);
+
+// Only instance events
+EventNode<InstanceEvent> instanceNode = EventNode.type("instances", EventFilter.INSTANCE);
+```
+
+<Tip>
+`EventFilter` provides pre-built filters for common event types: PLAYER, ENTITY, INSTANCE, ITEM, and more.
+</Tip>
+
+### Event-Filtered Node
+
+Filters based on the event object itself:
+
+```java EventNode.java:77-82
+// Only events where player is in creative mode
+EventNode<PlayerEvent> creativeNode = EventNode.event("creative-players", 
+    EventFilter.PLAYER, 
+    event -> event.getPlayer().getGameMode() == GameMode.CREATIVE
+);
+
+// Only events in positive X/Z quadrant
+EventNode<PlayerEvent> posQuadrantNode = EventNode.event("pos-quadrant",
+    EventFilter.PLAYER,
+    event -> {
+        var pos = event.getPlayer().getPosition();
+        return pos.x() > 0 && pos.z() > 0;
+    }
+);
+```
+
+### Value-Filtered Node
+
+Filters based on the event handler (player, entity, instance, etc.):
+
+```java EventNode.java:130-135
+// Only creative players
+EventNode<PlayerEvent> creativeNode = EventNode.value("creative",
+    EventFilter.PLAYER,
+    player -> player.getGameMode() == GameMode.CREATIVE
+);
+
+// Only players with specific permission
+EventNode<PlayerEvent> adminNode = EventNode.value("admins",
+    EventFilter.PLAYER,
+    player -> player.getPermissionLevel() >= 4
+);
+```
+
+### Tag-Filtered Node
+
+Filters based on tags on the handler:
+
+```java EventNode.java:149-154
+// Players with a specific tag
+Tag<Boolean> VIP_TAG = Tag.Boolean("vip");
+EventNode<PlayerEvent> vipNode = EventNode.tag("vip-players",
+    EventFilter.PLAYER,
+    VIP_TAG
+);
+
+// Players with a specific tag value
+Tag<String> TEAM_TAG = Tag.String("team");
+EventNode<PlayerEvent> redTeamNode = EventNode.tag("red-team",
+    EventFilter.PLAYER,
+    TEAM_TAG,
+    team -> "red".equals(team)
+);
+```
+
+## Registering Event Listeners
+
+### Simple Listener
+
+```java EventListener.java:42-57
+// Add to a node
+eventNode.addListener(PlayerLoginEvent.class, event -> {
+    event.getPlayer().sendMessage("Welcome!");
+});
+
+// Add to global handler
+MinecraftServer.getGlobalEventHandler().addListener(PlayerChatEvent.class, event -> {
+    System.out.println(event.getPlayer().getUsername() + ": " + event.getMessage());
+});
+```
+
+### Builder Pattern
+
+For advanced listener configuration:
+
+```java EventListener.java:81-176
+EventListener<PlayerMoveEvent> listener = EventListener.builder(PlayerMoveEvent.class)
+    // Only if player moved more than 1 block
+    .filter(event -> event.getNewPosition().distance(event.getPlayer().getPosition()) > 1.0)
+    // Don't call if event is cancelled
+    .ignoreCancelled(true)
+    // Expire after 100 calls
+    .expireCount(100)
+    // Or expire when condition is met
+    .expireWhen(event -> event.getPlayer().getGameMode() == GameMode.SPECTATOR)
+    // The handler
+    .handler(event -> {
+        System.out.println("Player moved significantly!");
+    })
+    .build();
+
+eventNode.addListener(listener);
+```
+
+### Removing Listeners
+
+```java EventNode.java:332
+EventListener<PlayerChatEvent> listener = EventListener.of(PlayerChatEvent.class, event -> {
+    // Handler code
+});
+
+eventNode.addListener(listener);
+// Later...
+eventNode.removeListener(listener);
+```
+
+## Node Hierarchy
+
+### Adding Child Nodes
+
+```java EventNode.java:312
+EventNode<Event> rootNode = EventNode.all("root");
+EventNode<PlayerEvent> playerNode = EventNode.type("players", EventFilter.PLAYER);
+EventNode<PlayerEvent> adminNode = EventNode.value("admins", EventFilter.PLAYER,
+    player -> player.getPermissionLevel() >= 4
+);
+
+// Build hierarchy
+rootNode.addChild(playerNode);
+playerNode.addChild(adminNode);
+
+// Events flow: root -> players -> admins
+```
+
+### Removing Child Nodes
+
+```java EventNode.java:321
+rootNode.removeChild(playerNode);
+```
+
+### Finding Nodes
+
+```java EventNode.java:252-263
+// Find all nodes with a specific name
+List<EventNode<PlayerEvent>> nodes = rootNode.findChildren("player-handler", PlayerEvent.class);
+
+// Find by name only
+List<EventNode<Event>> nodes = rootNode.findChildren("my-node");
+```
+
+### Replacing Nodes
+
+```java EventNode.java:274
+// Replace all nodes named "old-handler" with a new one
+EventNode<PlayerEvent> newNode = EventNode.type("new-handler", EventFilter.PLAYER);
+rootNode.replaceChildren("old-handler", PlayerEvent.class, newNode);
+```
+
+### Removing by Name
+
+```java EventNode.java:294-303
+// Remove all nodes with a specific name
+rootNode.removeChildren("temporary-handler");
+```
+
+## Global Event Handler
+
+The global event handler is the root of the event graph:
+
+```java
+GlobalEventHandler globalHandler = MinecraftServer.getGlobalEventHandler();
+
+// Add listeners directly
+globalHandler.addListener(ServerListPingEvent.class, event -> {
+    // Handle server list ping
+});
+
+// Add child nodes
+EventNode<PlayerEvent> playerNode = EventNode.type("players", EventFilter.PLAYER);
+globalHandler.addChild(playerNode);
+```
+
+## Instance-Specific Events
+
+Each instance has its own event node:
+
+```java Instance.java:967-969
+EventNode<InstanceEvent> instanceEvents = instance.eventNode();
+
+instanceEvents.addListener(PlayerSpawnEvent.class, event -> {
+    event.getPlayer().sendMessage("Welcome to this world!");
+});
+
+instanceEvents.addListener(InstanceTickEvent.class, event -> {
+    // Called every tick for this instance
+});
+```
+
+<Info>
+Instance event nodes are automatically mapped to the instance, so events only reach listeners registered on the correct instance.
+</Info>
+
+## Real-World Examples
+
+### Game System
+
+```java PlayerInit.java:72-412
+public class GameSystem {
+    private final EventNode<Event> gameNode = EventNode.all("game-system");
+    
+    public void init() {
+        // Add to global handler
+        MinecraftServer.getGlobalEventHandler().addChild(gameNode);
+        
+        // Combat system
+        gameNode.addListener(EntityAttackEvent.class, event -> {
+            final Entity source = event.getEntity();
+            final Entity target = event.getTarget();
+            
+            // Apply knockback
+            target.takeKnockback(0.4f, 
+                Math.sin(source.getPosition().yaw() * 0.017453292),
+                -Math.cos(source.getPosition().yaw() * 0.017453292)
+            );
+            
+            if (target instanceof Player player) {
+                player.damage(Damage.fromEntity(source, 5));
+            }
+        });
+        
+        // Item pickup
+        gameNode.addListener(PickupItemEvent.class, event -> {
+            if (event.getLivingEntity() instanceof Player player) {
+                ItemStack item = event.getItemEntity().getItemStack();
+                event.setCancelled(!player.getInventory().addItemStack(item));
+            }
+        });
+        
+        // Player death
+        gameNode.addListener(PlayerDeathEvent.class, event -> {
+            event.setChatMessage(Component.text("custom death message"));
+        });
+    }
+}
+```
+
+### Player Initialization
+
+```java PlayerInit.java:109-213
+gameNode.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+    final Player player = event.getPlayer();
+    
+    // Select random instance
+    var instances = MinecraftServer.getInstanceManager().getInstances();
+    Instance instance = instances.stream()
+        .skip(new Random().nextInt(instances.size()))
+        .findFirst()
+        .orElse(null);
+    event.setSpawningInstance(instance);
+    
+    // Set spawn point
+    player.setRespawnPoint(new Pos(0, 40, 0));
+});
+
+gameNode.addListener(PlayerSpawnEvent.class, event -> {
+    final Player player = event.getPlayer();
+    player.setGameMode(GameMode.CREATIVE);
+    player.setPermissionLevel(4);
+    
+    if (event.isFirstSpawn()) {
+        player.sendNotification(new Notification(
+            Component.text("Welcome!"),
+            FrameType.TASK,
+            Material.IRON_SWORD
+        ));
+    }
+});
+```
+
+### Block Interactions
+
+```java PlayerInit.java:296-312
+gameNode.addListener(PlayerBlockInteractEvent.class, event -> {
+    var player = event.getPlayer();
+    var instance = event.getInstance();
+    var block = event.getBlock();
+    
+    // Bed interaction
+    if (block.key().asMinimalString().endsWith("_bed")) {
+        var pos = event.getBlockPosition();
+        var isHead = "head".equals(block.getProperty("part"));
+        var facing = BlockFace.valueOf(block.getProperty("facing").toUpperCase());
+        
+        // Find other half of bed
+        var other = isHead 
+            ? pos.add(facing.getOppositeFace().toDirection().vec().asPos())
+            : pos.add(facing.toDirection().vec().asPos());
+            
+        player.enterBed(isHead ? pos : other);
+    }
+});
+```
+
+## Event Priorities
+
+Nodes can have priorities to control execution order:
+
+```java EventNode.java:227-230
+EventNode<Event> highPriorityNode = EventNode.all("high-priority")
+    .setPriority(100);
+    
+EventNode<Event> lowPriorityNode = EventNode.all("low-priority")
+    .setPriority(-100);
+```
+
+<Note>
+Higher priority nodes execute first. Default priority is 0.
+</Note>
+
+## Cancellable Events
+
+Many events can be cancelled:
+
+```java
+eventNode.addListener(PlayerBlockBreakEvent.class, event -> {
+    if (event.getBlock().compare(Block.BEDROCK)) {
+        event.setCancelled(true); // Prevent breaking bedrock
+    }
+});
+
+eventNode.addListener(PlayerMoveEvent.class, event -> {
+    if (event.getNewPosition().y() < 0) {
+        event.setCancelled(true); // Prevent falling into void
+    }
+});
+```
+
+### Ignoring Cancelled Events
+
+```java EventListener.java:92-102
+// By default, listeners ignore cancelled events
+eventNode.addListener(PlayerMoveEvent.class, event -> {
+    // Won't run if event is cancelled
+});
+
+// Explicitly handle cancelled events
+EventListener.builder(PlayerMoveEvent.class)
+    .ignoreCancelled(false)
+    .handler(event -> {
+        // Runs even if event is cancelled
+    })
+    .build();
+```
+
+## Calling Events
+
+### Standard Call
+
+```java EventNode.java:187-190
+eventNode.call(new CustomEvent());
+```
+
+### Cancellable Call with Callback
+
+```java EventNode.java:213-218
+eventNode.callCancellable(event, () -> {
+    // Only runs if event wasn't cancelled
+    System.out.println("Event succeeded!");
+});
+```
+
+## Mapped Nodes
+
+For advanced use cases, you can map specific objects to nodes:
+
+```java EventNode.java:345
+// Map a player to a specific node
+EventNode<PlayerEvent> playerNode = globalHandler.map(
+    player,
+    EventFilter.PLAYER
+);
+
+// Events for this player will reach this node
+playerNode.addListener(PlayerMoveEvent.class, event -> {
+    // Only for this specific player
+});
+
+// Unmap when done
+globalHandler.unmap(player);
+```
+
+<Warning>
+Mapped nodes have significant performance overhead due to map lookups. Use sparingly and prefer filtered nodes when possible.
+</Warning>
+
+## Best Practices
+
+### 1. Organize by Feature
+
+```java
+EventNode<Event> rootNode = EventNode.all("game");
+EventNode<PlayerEvent> combatNode = EventNode.type("combat", EventFilter.PLAYER);
+EventNode<PlayerEvent> economyNode = EventNode.type("economy", EventFilter.PLAYER);
+
+rootNode.addChild(combatNode);
+rootNode.addChild(economyNode);
+```
+
+### 2. Use Specific Filters
+
+```java
+// Good - specific filter
+EventNode<PlayerEvent> adminNode = EventNode.value("admins",
+    EventFilter.PLAYER,
+    player -> player.getPermissionLevel() >= 4
+);
+
+// Less efficient - filtering in listener
+eventNode.addListener(PlayerEvent.class, event -> {
+    if (event.getPlayer().getPermissionLevel() >= 4) {
+        // ...
+    }
+});
+```
+
+### 3. Clean Up Temporary Nodes
+
+```java
+public class Minigame {
+    private final EventNode<PlayerEvent> gameNode;
+    
+    public void start() {
+        gameNode = EventNode.type("minigame", EventFilter.PLAYER);
+        MinecraftServer.getGlobalEventHandler().addChild(gameNode);
+        // Add listeners...
+    }
+    
+    public void stop() {
+        MinecraftServer.getGlobalEventHandler().removeChild(gameNode);
+    }
+}
+```
+
+### 4. Avoid Deep Hierarchies
+
+```java
+// Good - flat structure
+rootNode.addChild(playerNode);
+rootNode.addChild(entityNode);
+rootNode.addChild(instanceNode);
+
+// Less efficient - deep nesting
+rootNode.addChild(level1Node);
+level1Node.addChild(level2Node);
+level2Node.addChild(level3Node); // Slower event propagation
+```
+
+## Performance Considerations
+
+1. **Filter early** - Use node filters instead of listener conditionals
+2. **Minimize listeners** - Combine related logic when possible
+3. **Avoid mapped nodes** - Use filtered nodes for better performance
+4. **Clean up unused nodes** - Remove temporary event handlers
+5. **Use priorities wisely** - Too many priorities can complicate debugging
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="diagram-project" href="/core-concepts/architecture">
+    Learn about the overall server architecture
+  </Card>
+  <Card title="Threading" icon="layer-group" href="/core-concepts/threading">
+    Understand thread safety with events
+  </Card>
+</CardGroup>

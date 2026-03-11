@@ -1,0 +1,121 @@
+---
+title: Introduction
+description: Build high-performance, custom Minecraft servers with Minestom - a modern, lightweight Java framework with zero vanilla overhead
+---
+
+<img
+  className="block"
+  src="https://media.brand.dev/9b97c66e-3932-452d-8780-e38c5ee582c8.png"
+  alt="Minestom Logo"
+  style={{ width: '120px', margin: '0 auto 2rem' }}
+/>
+
+# Welcome to Minestom
+
+Minestom is an open-source library that enables developers to create their own Minecraft server software from scratch, without any code from Mojang. Unlike traditional server implementations, Minestom provides a complete API with no features by default - giving you full control to build exactly what you need.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Add Minestom to your project with Gradle or Maven
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first Minestom server in minutes
+  </Card>
+  <Card title="Core Concepts" icon="brain" href="/core-concepts/architecture">
+    Learn about instances, threading, and events
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/server">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Why Minestom?
+
+Minecraft servers have evolved significantly, but most don't take advantage of modern performance techniques. Minestom is designed for developers who want to build servers that benefit little from vanilla features - like creative servers, minigames, or KitPvP.
+
+<CardGroup cols={3}>
+  <Card title="Multi-threaded" icon="microchip">
+    Full multi-threading support for maximum performance
+  </Card>
+  <Card title="Instance System" icon="cubes">
+    Lightweight, scalable world management
+  </Card>
+  <Card title="Modern API" icon="sparkles">
+    Clean, type-safe API with no legacy NMS
+  </Card>
+  <Card title="Zero Overhead" icon="gauge-high">
+    No vanilla features slowing you down
+  </Card>
+  <Card title="Event-Driven" icon="bolt">
+    Powerful event system for extensibility
+  </Card>
+  <Card title="1.21 Protocol" icon="network-wired">
+    Full support for Minecraft 1.21.11
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Multi-threaded Architecture
+Unlike traditional servers that run on a single thread, Minestom uses a thread pool to manage all chunks independently across instances. This means better CPU utilization and higher performance under load.
+
+### Instance-Based Worlds
+Instances are lightweight collections of blocks and entities that can be created on the fly, copied instantly, and serialized however you want. Perfect for minigames, skyblock, or any scenario where you need dynamic world management.
+
+### Modern Event System
+A flexible, type-safe event system powered by `EventNode` that supports filtering, conditions, and hierarchical event handling. No more dealing with obfuscated NMS or brittle reflection.
+
+### Built-in Command System
+First-class support for Minecraft's Brigadier command system with full argument parsing, tab completion, and command graph generation.
+
+## What Minestom Is Not
+
+<Warning>
+Minestom is a **developer API**, not a drop-in replacement for Bukkit, Forge, or Sponge. It does not work with plugins or mods from those platforms.
+</Warning>
+
+Minestom is designed for developers who want to build custom server implementations from the ground up. If you're looking for a vanilla-like experience or want to use existing plugins, Minestom is not the right choice.
+
+## Use Cases
+
+Minestom excels when:
+- Building custom minigame servers where vanilla mechanics aren't needed
+- Creating creative or building servers with custom tools
+- Developing lobby systems or hub servers
+- Implementing custom game modes that don't rely on vanilla features
+- Prototyping new Minecraft-based experiences
+
+Minestom is not ideal when:
+- You want a vanilla survival experience
+- You need compatibility with Bukkit/Spigot plugins
+- You're looking for something that works out-of-the-box without coding
+
+## Community & Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/minestom/Minestom">
+    View source code and contribute
+  </Card>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/pkFRvqB">
+    Join the Minestom community
+  </Card>
+  <Card title="Wiki" icon="book" href="https://wiki.minestom.net">
+    Additional tutorials and guides
+  </Card>
+  <Card title="Javadocs" icon="file-code" href="https://javadoc.minestom.net">
+    Complete API documentation
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+Ready to get started? Follow our installation guide to add Minestom to your project, then check out the quickstart to build your first server.
+
+<CardGroup cols={2}>
+  <Card title="Install Minestom" icon="arrow-right" href="/installation">
+    Set up your development environment
+  </Card>
+  <Card title="Build Your First Server" icon="arrow-right" href="/quickstart">
+    Create a working server in 5 minutes
+  </Card>
+</CardGroup>

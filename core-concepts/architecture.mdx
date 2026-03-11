@@ -1,0 +1,246 @@
+---
+title: 'Architecture'
+description: 'Understanding Minestom server architecture and initialization'
+---
+
+## Overview
+
+Minestom follows a modular architecture built around a central `MinecraftServer` class and a `ServerProcess` interface that coordinates all major server subsystems. Unlike traditional Minecraft server implementations, Minestom is designed from the ground up for flexibility, performance, and thread-safety.
+
+## Server Initialization
+
+The server initialization process follows a two-step pattern:
+
+```java Main.java
+MinecraftServer minecraftServer = MinecraftServer.init();
+// Configure your server (instances, commands, events, etc.)
+minecraftServer.start("0.0.0.0", 25565);
+```
+
+<Note>
+All server configuration (dimensions, biomes, commands, events) must be registered **between** `init()` and `start()`. Once the server starts, some configurations cannot be changed.
+</Note>
+
+### Initialization Steps
+
+The `MinecraftServer.init()` method performs the following:
+
+1. **Creates ServerProcess** - Initializes the core server process with authentication settings
+2. **Registers Managers** - Sets up all major subsystems (see below)
+3. **Initializes Registries** - Loads dynamic registries for dimensions, biomes, etc.
+4. **Returns MinecraftServer** - Returns the configured server instance
+
+### Starting the Server
+
+When you call `start()`, the server:
+
+1. **Starts the network server** - Binds to the specified address/port
+2. **Starts the thread dispatcher** - Initializes tick threads for chunks and entities
+3. **Starts the tick scheduler** - Begins the main server tick loop at 20 TPS (configurable)
+
+```java MinecraftServer.java:350-354
+public void start(SocketAddress address) {
+    serverProcess.start(address);
+    serverProcess.dispatcher().start();
+    new TickSchedulerThread(serverProcess).start();
+}
+```
+
+## Core Managers
+
+The `ServerProcess` interface exposes all major server subsystems through manager classes. Each manager handles a specific aspect of server functionality:
+
+<CardGroup cols={2}>
+  <Card title="InstanceManager" icon="cube" href="/core-concepts/instances">
+    Manages all world instances (what Minecraft calls "worlds")
+  </Card>
+  <Card title="ConnectionManager" icon="users">
+    Handles player connections and network sessions
+  </Card>
+  <Card title="CommandManager" icon="terminal">
+    Registers and dispatches command execution
+  </Card>
+  <Card title="EventHandler" icon="bolt" href="/core-concepts/events">
+    Global event system for listening to server events
+  </Card>
+  <Card title="BlockManager" icon="box">
+    Registers block handlers and placement rules
+  </Card>
+  <Card title="SchedulerManager" icon="clock">
+    Schedules tasks to run at specific intervals
+  </Card>
+  <Card title="RecipeManager" icon="book">
+    Manages crafting recipes sent to clients
+  </Card>
+  <Card title="TeamManager" icon="people-group">
+    Handles scoreboard teams
+  </Card>
+</CardGroup>
+
+### Accessing Managers
+
+All managers are accessible through static methods on `MinecraftServer`:
+
+```java
+// Instance management
+InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+InstanceContainer instance = instanceManager.createInstanceContainer();
+
+// Command registration
+CommandManager commandManager = MinecraftServer.getCommandManager();
+commandManager.register(new MyCommand());
+
+// Event handling
+GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+eventHandler.addListener(PlayerLoginEvent.class, event -> {
+    event.getPlayer().sendMessage("Welcome!");
+});
+
+// Block handlers
+BlockManager blockManager = MinecraftServer.getBlockManager();
+blockManager.registerHandler("custom:block", () -> new MyBlockHandler());
+```
+
+## ServerProcess Interface
+
+The `ServerProcess` interface is the heart of Minestom's architecture. It provides:
+
+<Tip>
+You can access the current `ServerProcess` via `MinecraftServer.process()` for advanced use cases, but most applications should use the convenience methods on `MinecraftServer` instead.
+</Tip>
+
+### Key Responsibilities
+
+1. **Lifecycle Management** - Controls server startup and shutdown
+2. **Manager Access** - Provides access to all subsystem managers
+3. **Threading** - Manages the thread dispatcher and ticker
+4. **Registry Access** - Exposes dynamic registries for game data
+
+```java ServerProcess.java:30-135
+public interface ServerProcess extends Registries, Snapshotable {
+    ConnectionManager connection();
+    InstanceManager instance();
+    BlockManager block();
+    CommandManager command();
+    GlobalEventHandler eventHandler();
+    SchedulerManager scheduler();
+    ThreadDispatcher<Chunk, Entity> dispatcher();
+    Ticker ticker();
+    // ... and more
+}
+```
+
+## Configuration via ServerFlags
+
+Minestom uses system properties (via `ServerFlag`) for low-level configuration:
+
+```java ServerFlag.java:15-20
+public static final int SERVER_TICKS_PER_SECOND = intProperty("minestom.tps", 20);
+public static final int CHUNK_VIEW_DISTANCE = intProperty("minestom.chunk-view-distance", 8);
+public static final int ENTITY_VIEW_DISTANCE = intProperty("minestom.entity-view-distance", 5);
+public static final int DISPATCHER_THREADS = intProperty("minestom.dispatcher-threads", 1);
+```
+
+### Common Server Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `minestom.tps` | 20 | Server ticks per second |
+| `minestom.chunk-view-distance` | 8 | Default chunk view distance |
+| `minestom.entity-view-distance` | 5 | Default entity view distance |
+| `minestom.dispatcher-threads` | 1 | Number of tick threads |
+
+<Warning>
+Server flags must be set **before** calling `MinecraftServer.init()` as they are read during initialization.
+</Warning>
+
+Set them via system properties:
+
+```java
+System.setProperty("minestom.tps", "30"); // 30 TPS instead of 20
+MinecraftServer minecraftServer = MinecraftServer.init();
+```
+
+## Authentication
+
+Minestom supports both online and offline mode authentication:
+
+```java Main.java:45
+// Offline mode (no Mojang authentication)
+MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+
+// Online mode (requires Mojang authentication)
+MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Online());
+```
+
+<Note>
+Online mode requires players to authenticate with Mojang's servers. Offline mode allows any player to join with any username.
+</Note>
+
+## Complete Initialization Example
+
+Here's a complete example from the demo project:
+
+```java Main.java:41-175
+public static void main(String[] args) {
+    // Initialize server
+    MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+    
+    // Register block handlers
+    BlockManager blockManager = MinecraftServer.getBlockManager();
+    blockManager.registerHandler(TestBlockHandler.INSTANCE.getKey(), 
+                                () -> TestBlockHandler.INSTANCE);
+    
+    // Register commands
+    CommandManager commandManager = MinecraftServer.getCommandManager();
+    commandManager.register(new TestCommand());
+    commandManager.register(new TeleportCommand());
+    
+    // Set up event listeners
+    MinecraftServer.getGlobalEventHandler().addListener(
+        ServerListPingEvent.class, event -> {
+            event.setStatus(Status.builder()
+                .description(Component.text("Minestom Server"))
+                .build());
+        }
+    );
+    
+    // Create instance
+    InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+    InstanceContainer instance = instanceManager.createInstanceContainer();
+    instance.setGenerator(unit -> {
+        unit.modifier().fillHeight(0, 40, Block.STONE);
+    });
+    
+    // Start server
+    minecraftServer.start("0.0.0.0", 25565);
+}
+```
+
+## Shutdown
+
+To cleanly shutdown the server:
+
+```java
+MinecraftServer.stopCleanly();
+```
+
+This will:
+- Kick all players with a disconnect message
+- Save all instances (if chunk loaders are configured)
+- Stop all tick threads
+- Close network connections
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Instances" icon="cube" href="/core-concepts/instances">
+    Learn about the instance system and world management
+  </Card>
+  <Card title="Threading" icon="layer-group" href="/core-concepts/threading">
+    Understand Minestom's multi-threaded tick system
+  </Card>
+  <Card title="Events" icon="bolt" href="/core-concepts/events">
+    Master the event system for handling game events
+  </Card>
+</CardGroup>

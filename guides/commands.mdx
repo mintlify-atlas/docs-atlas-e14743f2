@@ -1,0 +1,432 @@
+---
+title: 'Commands'
+description: 'Create powerful commands with Brigadier-style syntax and autocompletion'
+---
+
+Minestom's command system is built on Brigadier, providing powerful argument parsing, validation, and auto-completion.
+
+## Command Basics
+
+Commands in Minestom are created by extending the `Command` class and defining syntaxes with arguments.
+
+### Creating Your First Command
+
+```java
+import net.minestom.server.command.builder.Command;
+import net.minestom.server.command.builder.CommandContext;
+import net.minestom.server.command.CommandSender;
+import net.kyori.adventure.text.Component;
+
+public class HelloCommand extends Command {
+    
+    public HelloCommand() {
+        super("hello");
+        
+        setDefaultExecutor(this::defaultExecutor);
+    }
+    
+    private void defaultExecutor(CommandSender sender, CommandContext context) {
+        sender.sendMessage(Component.text("Hello, world!"));
+    }
+}
+```
+
+### Registering Commands
+
+```java
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.command.CommandManager;
+
+CommandManager commandManager = MinecraftServer.getCommandManager();
+commandManager.register(new HelloCommand());
+```
+
+## Command Arguments
+
+Arguments define what inputs your command accepts.
+
+### Basic Argument Types
+
+```java
+import net.minestom.server.command.builder.arguments.ArgumentType;
+import net.minestom.server.command.builder.arguments.Argument;
+
+// String argument
+Argument<String> name = ArgumentType.String("name");
+
+// Integer argument
+Argument<Integer> amount = ArgumentType.Integer("amount");
+
+// Double argument
+Argument<Double> multiplier = ArgumentType.Double("multiplier");
+
+// Boolean argument
+Argument<Boolean> enabled = ArgumentType.Boolean("enabled");
+
+// Word (single word, no spaces)
+Argument<String> mode = ArgumentType.Word("mode");
+```
+
+### Minecraft-Specific Arguments
+
+```java
+// Block state
+Argument<Block> block = ArgumentType.BlockState("block");
+
+// Entity type
+ArgumentEntityType entityType = ArgumentType.EntityType("entity");
+
+// Entity selector (@p, @a, etc.)
+Argument<EntitySelector> selector = ArgumentType.Entity("target");
+
+// Position (absolute or relative)
+Argument<RelativeVec> position = ArgumentType.RelativeVec3("pos");
+
+// Item stack
+Argument<ItemStack> item = ArgumentType.ItemStack("item");
+```
+
+## Command Syntaxes
+
+Syntaxes define the structure of your command and what happens when executed.
+
+### Adding Syntaxes
+
+```java
+public class HealthCommand extends Command {
+    
+    public HealthCommand() {
+        super("health");
+        
+        setDefaultExecutor(this::defaultExecutor);
+        
+        // Create arguments
+        var modeArg = ArgumentType.Word("mode").from("set", "add");
+        var valueArg = ArgumentType.Integer("value").between(0, 100);
+        
+        // Define syntaxes
+        addSyntax(this::executeWithMode, modeArg);
+        addSyntax(this::executeComplete, modeArg, valueArg);
+    }
+    
+    private void defaultExecutor(CommandSender sender, CommandContext context) {
+        sender.sendMessage(Component.text("Usage: /health <set|add> <value>"));
+    }
+    
+    private void executeWithMode(CommandSender sender, CommandContext context) {
+        String mode = context.get("mode");
+        sender.sendMessage(Component.text("/health " + mode + " [value]"));
+    }
+    
+    private void executeComplete(CommandSender sender, CommandContext context) {
+        Player player = (Player) sender;
+        String mode = context.get("mode");
+        int value = context.get("value");
+        
+        switch (mode.toLowerCase()) {
+            case "set" -> player.setHealth(value);
+            case "add" -> player.setHealth(player.getHealth() + value);
+        }
+        
+        player.sendMessage(Component.text("Health: " + player.getHealth()));
+    }
+}
+```
+
+## Argument Constraints
+
+### Restricting Values
+
+```java
+// Integer between min and max
+var value = ArgumentType.Integer("value").between(0, 100);
+
+// Word from specific options
+var mode = ArgumentType.Word("mode").from("set", "add", "remove");
+
+// Enum argument
+var gameMode = ArgumentType.Enum("mode", GameMode.class)
+    .setFormat(ArgumentEnum.Format.LOWER_CASED);
+```
+
+### Default Values
+
+```java
+// Set default value
+var position = ArgumentType.RelativeVec3("pos")
+    .setDefaultValue(() -> new RelativeVec(
+        new Vec(0, 0, 0),
+        RelativeVec.CoordinateType.RELATIVE,
+        true, true, true
+    ));
+```
+
+## Argument Callbacks
+
+Handle invalid arguments with custom error messages:
+
+```java
+import net.minestom.server.command.builder.exception.ArgumentSyntaxException;
+import net.minestom.server.command.builder.arguments.number.ArgumentNumber;
+
+public class HealthCommand extends Command {
+    
+    public HealthCommand() {
+        super("health");
+        
+        var modeArg = ArgumentType.Word("mode").from("set", "add");
+        var valueArg = ArgumentType.Integer("value").between(0, 100);
+        
+        // Set error callbacks
+        setArgumentCallback(this::onModeError, modeArg);
+        setArgumentCallback(this::onValueError, valueArg);
+        
+        addSyntax(this::execute, modeArg, valueArg);
+    }
+    
+    private void onModeError(CommandSender sender, ArgumentSyntaxException exception) {
+        sender.sendMessage(Component.text(
+            "Invalid mode: '" + exception.getInput() + "'. Use 'set' or 'add'"
+        ));
+    }
+    
+    private void onValueError(CommandSender sender, ArgumentSyntaxException exception) {
+        int error = exception.getErrorCode();
+        String input = exception.getInput();
+        
+        switch (error) {
+            case ArgumentNumber.NOT_NUMBER_ERROR ->
+                sender.sendMessage(Component.text("'" + input + "' is not a number"));
+            case ArgumentNumber.TOO_LOW_ERROR ->
+                sender.sendMessage(Component.text(input + " is too low (min: 0)"));
+            case ArgumentNumber.TOO_HIGH_ERROR ->
+                sender.sendMessage(Component.text(input + " is too high (max: 100)"));
+        }
+    }
+}
+```
+
+## Command Conditions
+
+Restrict who can execute commands:
+
+```java
+import net.minestom.server.command.builder.condition.Conditions;
+
+public class AdminCommand extends Command {
+    
+    public AdminCommand() {
+        super("admin");
+        
+        // Only players can execute
+        setCondition(Conditions::playerOnly);
+        
+        // Or custom condition
+        setCondition((sender, commandString) -> {
+            if (sender instanceof Player player) {
+                return player.hasPermission("admin.command");
+            }
+            return false;
+        });
+    }
+}
+```
+
+## Advanced Examples
+
+### Summon Command
+
+From the Minestom demo - summons entities at specified positions:
+
+```java
+import net.minestom.server.command.builder.arguments.minecraft.registry.ArgumentEntityType;
+import net.minestom.server.utils.location.RelativeVec;
+
+public class SummonCommand extends Command {
+    
+    public SummonCommand() {
+        super("summon");
+        setCondition(Conditions::playerOnly);
+        
+        var entityType = ArgumentType.EntityType("entity");
+        var position = ArgumentType.RelativeVec3("pos")
+            .setDefaultValue(() -> new RelativeVec(
+                new Vec(0, 0, 0),
+                RelativeVec.CoordinateType.RELATIVE,
+                true, true, true
+            ));
+        
+        addSyntax(this::execute, entityType, position);
+    }
+    
+    private void execute(CommandSender sender, CommandContext context) {
+        Player player = (Player) sender;
+        EntityType type = context.get("entity");
+        RelativeVec relPos = context.get("pos");
+        
+        // Create entity
+        EntityCreature entity = new EntityCreature(type);
+        
+        // Calculate absolute position
+        Pos spawnPos = relPos.fromSender(sender);
+        
+        // Spawn in player's instance
+        entity.setInstance(player.getInstance(), spawnPos);
+        
+        player.sendMessage(Component.text("Summoned " + type.name()));
+    }
+}
+```
+
+### Teleport Command
+
+```java
+public class TeleportCommand extends Command {
+    
+    public TeleportCommand() {
+        super("tp", "teleport");
+        
+        setCondition(Conditions::playerOnly);
+        
+        var position = ArgumentType.RelativeVec3("position");
+        var target = ArgumentType.Entity("target")
+            .onlyPlayers(true)
+            .singleEntity(true);
+        
+        // /tp <position>
+        addSyntax(this::teleportToPos, position);
+        
+        // /tp <player>
+        addSyntax(this::teleportToPlayer, target);
+    }
+    
+    private void teleportToPos(CommandSender sender, CommandContext context) {
+        Player player = (Player) sender;
+        RelativeVec relPos = context.get("position");
+        
+        Pos pos = relPos.fromSender(sender);
+        player.teleport(pos);
+        player.sendMessage(Component.text("Teleported to " + pos));
+    }
+    
+    private void teleportToPlayer(CommandSender sender, CommandContext context) {
+        Player player = (Player) sender;
+        EntityFinder finder = context.get("target");
+        
+        Player target = finder.findFirstPlayer(sender);
+        if (target != null) {
+            player.teleport(target.getPosition());
+            player.sendMessage(Component.text("Teleported to " + target.getUsername()));
+        }
+    }
+}
+```
+
+## Subcommands
+
+Organize related commands:
+
+```java
+public class GameCommand extends Command {
+    
+    public GameCommand() {
+        super("game");
+        
+        // Add subcommands
+        addSubcommand(new StartCommand());
+        addSubcommand(new StopCommand());
+        addSubcommand(new StatusCommand());
+    }
+    
+    private static class StartCommand extends Command {
+        public StartCommand() {
+            super("start");
+            setDefaultExecutor((sender, context) -> {
+                sender.sendMessage(Component.text("Game started!"));
+            });
+        }
+    }
+    
+    private static class StopCommand extends Command {
+        public StopCommand() {
+            super("stop");
+            setDefaultExecutor((sender, context) -> {
+                sender.sendMessage(Component.text("Game stopped!"));
+            });
+        }
+    }
+}
+```
+
+## Unknown Command Handler
+
+Handle unknown commands globally:
+
+```java
+CommandManager commandManager = MinecraftServer.getCommandManager();
+
+commandManager.setUnknownCommandCallback((sender, command) -> {
+    sender.sendMessage(
+        Component.text("Unknown command: " + command, NamedTextColor.RED)
+    );
+});
+```
+
+## Console Commands
+
+Commands work from both players and console:
+
+```java
+public class StopCommand extends Command {
+    
+    public StopCommand() {
+        super("stop");
+        
+        // No condition = both players and console can use
+        setDefaultExecutor((sender, context) -> {
+            if (sender instanceof Player player) {
+                player.kick(Component.text("Server stopping"));
+            }
+            MinecraftServer.stopCleanly();
+        });
+    }
+}
+```
+
+## Testing Commands
+
+Test your commands with different argument types:
+
+```java
+public class TestCommand extends Command {
+    
+    public TestCommand() {
+        super("test");
+        
+        var blockArg = ArgumentType.BlockState("block");
+        blockArg.setCallback((sender, exception) -> {
+            exception.printStackTrace();
+        });
+        
+        setDefaultExecutor((sender, context) -> {
+            sender.sendMessage(Component.text("Test command executed"));
+        });
+        
+        addSyntax((sender, context) -> {
+            Block block = context.get("block");
+            sender.sendMessage(Component.text("Block: " + block.key()));
+        }, blockArg);
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Entities" icon="dragon" href="/guides/entities">
+    Create commands to spawn and manage entities
+  </Card>
+  <Card title="Blocks" icon="cube" href="/guides/blocks">
+    Build commands to manipulate blocks
+  </Card>
+</CardGroup>

@@ -1,0 +1,412 @@
+---
+title: Networking API
+description: Connection management, player connections, and packet handling
+---
+
+## Overview
+
+The networking system manages all connected clients, handles player states (configuration and play), and provides utilities for sending packets.
+
+## ConnectionManager
+
+Manages all connected clients and player lifecycle.
+
+### Player Queries
+
+<ResponseField name="getOnlinePlayerCount" type="int">
+  Gets the number of players in the play state (for query response)
+</ResponseField>
+
+<ResponseField name="getOnlinePlayers" type="Collection<Player>">
+  Returns an unmodifiable collection of players currently in the play state
+</ResponseField>
+
+<ResponseField name="getConfigPlayers" type="Collection<Player>">
+  Returns an unmodifiable collection of players currently in the configuration state
+</ResponseField>
+
+<ResponseField name="getPlayer" type="Player">
+  Gets the Player linked to a PlayerConnection
+  
+  <Expandable title="parameters">
+    <ParamField path="connection" type="PlayerConnection">
+      The player connection
+    </ParamField>
+  </Expandable>
+  
+  Returns the player (regardless of state) or null
+</ResponseField>
+
+<ResponseField name="getOnlinePlayerByUsername" type="Player">
+  Gets the first player in play state matching the username (case-insensitive)
+  
+  <Expandable title="parameters">
+    <ParamField path="username" type="String">
+      The player username
+    </ParamField>
+  </Expandable>
+  
+  Returns the player or null if not found
+</ResponseField>
+
+<ResponseField name="getOnlinePlayerByUuid" type="Player">
+  Gets the first player in play state matching the UUID
+  
+  <Expandable title="parameters">
+    <ParamField path="uuid" type="UUID">
+      The player UUID
+    </ParamField>
+  </Expandable>
+  
+  Returns the player or null if not found
+</ResponseField>
+
+<ResponseField name="findOnlinePlayer" type="Player">
+  Finds the closest matching player in play state (fuzzy search)
+  
+  <Expandable title="parameters">
+    <ParamField path="username" type="String">
+      The username (can be partial)
+    </ParamField>
+  </Expandable>
+  
+  Uses Jaro-Winkler distance for matching. Returns null if no close match.
+</ResponseField>
+
+### Configuration
+
+<ResponseField name="setPlayerProvider" type="void">
+  Changes the Player provider to use custom Player implementations
+  
+  <Expandable title="parameters">
+    <ParamField path="playerProvider" type="PlayerProvider">
+      The provider (null for default)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Player State Transitions
+
+<ResponseField name="createPlayer" type="Player" internal>
+  Creates a Player instance for a connection
+  
+  <Expandable title="parameters">
+    <ParamField path="connection" type="PlayerConnection">
+      The player connection
+    </ParamField>
+    <ParamField path="gameProfile" type="GameProfile">
+      The player's game profile
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="transitionLoginToConfig" type="GameProfile" internal>
+  Transitions a player from login to configuration state
+  
+  <Expandable title="parameters">
+    <ParamField path="connection" type="PlayerConnection">
+      The connection
+    </ParamField>
+    <ParamField path="gameProfile" type="GameProfile">
+      The initial game profile
+    </ParamField>
+  </Expandable>
+  
+  Fires `AsyncPlayerPreLoginEvent` and handles compression
+</ResponseField>
+
+<ResponseField name="doConfiguration" type="void" internal>
+  Performs the configuration phase for a player
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to configure
+    </ParamField>
+    <ParamField path="isFirstConfig" type="boolean">
+      True if this is initial join, false for reconfiguration
+    </ParamField>
+  </Expandable>
+  
+  Sends registry data, resource packs, and fires `AsyncPlayerConfigurationEvent`
+</ResponseField>
+
+<ResponseField name="transitionPlayToConfig" type="void" internal>
+  Transitions a player from play to configuration state (for reconfiguration)
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to transition
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="transitionConfigToPlay" type="void" internal>
+  Transitions a player from configuration to play state
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to transition
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Management
+
+<ResponseField name="removePlayer" type="void" internal>
+  Removes a player from the connection manager
+  
+  <Expandable title="parameters">
+    <ParamField path="connection" type="PlayerConnection">
+      The connection to remove
+    </ParamField>
+  </Expandable>
+  
+  Use `PlayerConnection.disconnect()` instead of calling this directly
+</ResponseField>
+
+<ResponseField name="shutdown" type="void">
+  Shuts down the connection manager by kicking all connected players
+</ResponseField>
+
+<ResponseField name="tick" type="void" internal>
+  Ticks the connection manager (handles keep-alive, waiting players)
+  
+  <Expandable title="parameters">
+    <ParamField path="tickStart" type="long">
+      The tick start time in nanoseconds
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Registry & Tags
+
+<ResponseField name="sendRegistryTags" type="void">
+  Sends the tags packet to a player
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to send tags to
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="invalidateTags" type="void" internal>
+  Invalidates the cached tags packet (called when registries change)
+</ResponseField>
+
+## PlayerConnection
+
+Represents a connection to a player. Implementations include `PlayerSocketConnection` for real network connections.
+
+### Packet Sending
+
+<ResponseField name="sendPacket" type="void">
+  Sends a packet to the player
+  
+  <Expandable title="parameters">
+    <ParamField path="packet" type="SendablePacket">
+      The packet to send
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendPackets" type="void">
+  Sends multiple packets
+  
+  <Expandable title="parameters">
+    <ParamField path="packets" type="SendablePacket...">
+      The packets to send
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Connection Info
+
+<ResponseField name="getPlayer" type="Player">
+  Gets the Player associated with this connection (may be null before login)
+</ResponseField>
+
+<ResponseField name="getRemoteAddress" type="SocketAddress">
+  Gets the remote socket address
+</ResponseField>
+
+<ResponseField name="isOnline" type="boolean">
+  Checks if the connection is still active
+</ResponseField>
+
+<ResponseField name="disconnect" type="void">
+  Disconnects the player
+</ResponseField>
+
+<ResponseField name="kick" type="void">
+  Kicks the player with a reason
+  
+  <Expandable title="parameters">
+    <ParamField path="message" type="Component">
+      The kick message
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+## Player State Management
+
+Players transition through different states:
+
+1. **Login** - Initial handshake and authentication
+2. **Configuration** - Receiving registry data, resource packs, brand info
+3. **Play** - Actively playing in the world
+4. **Configuration** (reconfiguration) - Can transition back for updates
+
+<CodeGroup>
+```java State Queries
+ConnectionManager manager = MinecraftServer.getConnectionManager();
+
+// Get all players in play state
+Collection<Player> playing = manager.getOnlinePlayers();
+
+// Get players being configured
+Collection<Player> configuring = manager.getConfigPlayers();
+
+// Total connected (including configuration)
+int total = playing.size() + configuring.size();
+```
+
+```java Find Players
+ConnectionManager manager = MinecraftServer.getConnectionManager();
+
+// Exact username
+Player player = manager.getOnlinePlayerByUsername("Notch");
+
+// By UUID
+Player player = manager.getOnlinePlayerByUuid(uuid);
+
+// Fuzzy search
+Player player = manager.findOnlinePlayer("Not"); // May match "Notch"
+```
+</CodeGroup>
+
+## Custom Player Provider
+
+Create custom Player implementations:
+
+<CodeGroup>
+```java Custom Player
+public class CustomPlayer extends Player {
+    private int coins = 0;
+    
+    public CustomPlayer(PlayerConnection connection, GameProfile gameProfile) {
+        super(connection, gameProfile);
+    }
+    
+    public int getCoins() { return coins; }
+    public void addCoins(int amount) { this.coins += amount; }
+}
+
+// Register provider
+MinecraftServer.getConnectionManager().setPlayerProvider((connection, profile) -> {
+    return new CustomPlayer(connection, profile);
+});
+
+// Access custom methods
+for (Player p : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+    if (p instanceof CustomPlayer custom) {
+        System.out.println(custom.getCoins());
+    }
+}
+```
+</CodeGroup>
+
+## Packet Utilities
+
+### Sending to Multiple Players
+
+<CodeGroup>
+```java Broadcast Packets
+// Send to all online players
+for (Player player : MinecraftServer.getConnectionManager().getOnlinePlayers()) {
+    player.sendPacket(new SomePacket());
+}
+
+// Send to players in instance
+Instance instance = /* get instance */;
+instance.sendPackets(new SomePacket());
+
+// Send to nearby players
+player.sendPacketToViewersAndSelf(new SomePacket());
+```
+
+```java Cached Packets
+// For packets sent frequently to many players
+CachedPacket cached = new CachedPacket(() -> {
+    return new ExpensivePacket(/* complex data */);
+});
+
+// Send cached packet
+for (Player player : players) {
+    player.sendPacket(cached);
+}
+
+// Invalidate when data changes
+cached.invalidate();
+```
+</CodeGroup>
+
+## Configuration Events
+
+<CodeGroup>
+```java Pre-Login Event
+MinecraftServer.getGlobalEventHandler()
+    .addListener(AsyncPlayerPreLoginEvent.class, event -> {
+        // Check whitelist, bans, etc.
+        if (banned.contains(event.getPlayer().getUsername())) {
+            event.getPlayer().kick(Component.text("You are banned"));
+        }
+        
+        // Modify game profile
+        event.setGameProfile(new GameProfile(newUuid, newUsername));
+    });
+```
+
+```java Configuration Event
+MinecraftServer.getGlobalEventHandler()
+    .addListener(AsyncPlayerConfigurationEvent.class, event -> {
+        Player player = event.getPlayer();
+        
+        // Set spawning instance (required)
+        event.setSpawningInstance(myInstance);
+        
+        // Set hardcore mode
+        event.setHardcore(true);
+        
+        // Control what gets sent
+        event.setSendRegistryData(true);
+        event.setClearChat(false);
+        
+        // Enable custom features
+        event.getFeatureFlags().add(/* custom feature */);
+    });
+```
+</CodeGroup>
+
+## Keep-Alive System
+
+The ConnectionManager automatically sends keep-alive packets and kicks players who don't respond:
+
+- Keep-alive sent every `ServerFlag.KEEP_ALIVE_DELAY` milliseconds (default: 10000)
+- Players kicked after `ServerFlag.KEEP_ALIVE_KICK` milliseconds (default: 30000)
+
+<CodeGroup>
+```java Keep-Alive Info
+Player player = /* get player */;
+
+// Check last keep-alive time
+long lastKeepAlive = player.getLastKeepAlive();
+
+// Check if player answered
+boolean answered = player.didAnswerKeepAlive();
+```
+</CodeGroup>
+
+<Note>
+  Players are tracked separately during configuration and play states. The ConnectionManager handles state transitions automatically based on packet flow.
+</Note>

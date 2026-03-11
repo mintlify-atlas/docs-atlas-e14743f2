@@ -1,0 +1,513 @@
+---
+title: Performance Optimization
+description: Optimize your Minestom server for production workloads with advanced configuration options and best practices
+---
+
+## ServerFlags Configuration
+
+Minestom provides extensive configuration through system properties defined in `ServerFlag`. These flags control server behavior, networking, chunk management, and experimental features.
+
+### Setting Server Flags
+
+Configure flags via system properties when starting your server:
+
+```bash
+java -Dminestom.tps=20 -Dminestom.chunk-view-distance=10 -jar server.jar
+```
+
+Or programmatically before server initialization:
+
+```java
+System.setProperty("minestom.tps", "20");
+System.setProperty("minestom.chunk-view-distance", "10");
+```
+
+<Warning>
+ServerFlags must be set **before** server initialization. Changing them at runtime has no effect.
+</Warning>
+
+## Core Server Behavior
+
+### Tick Rate Configuration
+
+```java
+// Control server tick rate (default: 20 TPS)
+-Dminestom.tps=20
+
+// Maximum ticks to catch up if server falls behind (default: 5)
+-Dminestom.max-tick-catch-up=5
+```
+
+<Info>
+The catch-up mechanism prevents the server from spiraling when it falls behind, limiting how many ticks can be processed in rapid succession.
+</Info>
+
+### View Distance Optimization
+
+View distance is one of the most impactful performance settings:
+
+```java
+// Base chunk view distance for instances (default: 8)
+-Dminestom.chunk-view-distance=8
+
+// Entity view distance in chunks (default: 5)
+-Dminestom.entity-view-distance=5
+
+// Entity synchronization interval in ticks (default: 20)
+-Dminestom.entity-synchronization-ticks=20
+```
+
+<Tip>
+Lowering chunk view distance from 8 to 6 can significantly improve performance on servers with many players, while still maintaining good gameplay experience.
+</Tip>
+
+### Thread Configuration
+
+```java
+// Number of dispatcher threads (default: 1)
+-Dminestom.dispatcher-threads=1
+```
+
+Minestom uses a sophisticated thread dispatcher system. The dispatcher threads manage chunk and entity ticking across multiple threads.
+
+<Note>
+Increasing dispatcher threads doesn't always improve performance. Test with your specific workload before deploying to production.
+</Note>
+
+## Chunk Loading & Updates
+
+### Chunk Update Rate Limiting
+
+Control how many chunks are sent to players per tick:
+
+```java
+// Minimum chunks per tick (default: 0.01)
+-Dminestom.chunk-queue.min-per-tick=0.01
+
+// Maximum chunks per tick (default: 64.0)
+-Dminestom.chunk-queue.max-per-tick=64.0
+
+// Multiplier for chunk sending rate (default: 1.0)
+-Dminestom.chunk-queue.multiplier=1.0
+```
+
+The chunk queue system dynamically adjusts how many chunks are sent based on player movement and server load:
+
+```java
+public class ChunkLoadingExample {
+    public void optimizeChunkLoading(Instance instance) {
+        // Chunks are automatically managed by the chunk queue
+        // The system balances between MIN_CHUNKS_PER_TICK and MAX_CHUNKS_PER_TICK
+        
+        // For heavy terrain generation, consider:
+        // -Dminestom.chunk-queue.max-per-tick=32.0
+        // to prevent overwhelming the network
+    }
+}
+```
+
+### Player-Specific Chunk Limits
+
+```java
+// History size for chunk update rate limiting per player (default: 5)
+-Dminestom.player.chunk-update-limiter-history-size=5
+```
+
+## Network Optimization
+
+### Rate Limiting
+
+Protect your server from packet flooding:
+
+```java
+// Maximum packets processed per player per tick (default: 50)
+-Dminestom.packet-per-tick=50
+
+// Maximum queued packets per player (default: 1000)
+-Dminestom.packet-queue-size=1000
+
+// Keep-alive packet interval in ms (default: 10000)
+-Dminestom.keep-alive-delay=10000
+
+// Kick player after this many ms without keep-alive response (default: 15000)
+-Dminestom.keep-alive-kick=15000
+```
+
+<Warning>
+Setting `packet-per-tick` too low may cause legitimate players to be rate-limited during normal gameplay. The default of 50 is suitable for most servers.
+</Warning>
+
+### Buffer Sizes
+
+Optimize network buffers for your deployment:
+
+```java
+// Maximum packet size in bytes (default: 2097151)
+-Dminestom.max-packet-size=2097151
+
+// Maximum packet size before authentication (default: 8192)
+-Dminestom.max-packet-size-pre-auth=8192
+
+// Socket send buffer size (default: 262143)
+-Dminestom.send-buffer-size=262143
+
+// Socket receive buffer size (default: 32767)
+-Dminestom.receive-buffer-size=32767
+
+// Enable TCP_NODELAY for lower latency (default: true)
+-Dminestom.tcp-no-delay=true
+
+// Socket timeout in ms (default: 15000)
+-Dminestom.socket-timeout=15000
+
+// Pooled buffer size for packet encoding (default: 16383)
+-Dminestom.pooled-buffer-size=16383
+```
+
+### Packet Sending Optimizations
+
+Minestom includes several optimizations for packet sending:
+
+```java
+// Enable grouped packet sending (default: true)
+-Dminestom.grouped-packet=true
+
+// Enable packet caching (default: true)
+-Dminestom.cached-packet=true
+
+// Enable viewable packet optimization (default: true)
+-Dminestom.viewable-packet=true
+```
+
+<Info>
+These optimizations significantly reduce bandwidth usage and CPU overhead. Only disable them for debugging purposes.
+</Info>
+
+## Threading Best Practices
+
+### The Acquirable System
+
+Minestom uses an advanced threading model based on `Acquirable` to ensure thread-safe access to entities and chunks:
+
+```java
+import net.minestom.server.thread.Acquirable;
+import net.minestom.server.entity.Entity;
+
+public class ThreadSafeEntityAccess {
+    public void safeEntityModification(Entity entity) {
+        // Get the acquirable wrapper
+        Acquirable<Entity> acquirable = entity.getAcquirable();
+        
+        // Method 1: Synchronous access (blocks if needed)
+        acquirable.sync(e -> {
+            e.setVelocity(new Vec(0, 10, 0));
+            e.teleport(new Pos(0, 100, 0));
+        });
+        
+        // Method 2: Try without blocking
+        boolean success = acquirable.trySync(e -> {
+            e.setVelocity(new Vec(0, 10, 0));
+        });
+        
+        // Method 3: Check if local to current thread (no locking needed)
+        acquirable.local().ifPresent(e -> {
+            // This entity is already on our thread, no acquisition needed
+            e.damage(5.0f);
+        });
+    }
+}
+```
+
+<Note>
+The acquirable system ensures that chunks and entities are only modified by one thread at a time, preventing race conditions without explicit locking.
+</Note>
+
+### Thread Dispatcher
+
+The `ThreadDispatcher` manages entity and chunk ticking across multiple threads:
+
+```java
+import net.minestom.server.thread.ThreadDispatcher;
+import net.minestom.server.thread.ThreadProvider;
+
+public class CustomDispatcherExample {
+    public void createCustomDispatcher() {
+        // Create a dispatcher with 4 threads
+        ThreadDispatcher<MyPartition, MyTickable> dispatcher = 
+            ThreadDispatcher.dispatcher(
+                ThreadProvider.counter(), 
+                4
+            );
+        
+        // Start the dispatcher
+        dispatcher.start();
+        
+        // Create partitions (similar to chunks)
+        MyPartition partition = new MyPartition();
+        dispatcher.createPartition(partition);
+        
+        // Add tickable elements
+        MyTickable element = new MyTickable();
+        dispatcher.updateElement(element, partition);
+        
+        // Update all elements (called each tick)
+        dispatcher.updateAndAwait(System.nanoTime());
+        
+        // Refresh thread assignments (called after ticking)
+        dispatcher.refreshThreads();
+    }
+}
+```
+
+### Local Thread Access
+
+Access entities on the current thread without acquisition:
+
+```java
+import net.minestom.server.thread.Acquirable;
+import net.minestom.server.entity.Entity;
+
+public class LocalThreadOptimization {
+    public void processLocalEntities() {
+        // Get all entities on the current thread
+        Acquirable.localEntities().forEach(entity -> {
+            // Safe to access without acquisition
+            // This is very fast as no locking is required
+            entity.setGlowing(true);
+        });
+    }
+}
+```
+
+<Tip>
+When processing many entities, using `Acquirable.localEntities()` is much faster than acquiring each entity individually.
+</Tip>
+
+## Benchmarking
+
+Minestom includes JMH benchmarks for performance testing. These are located in the `jmh-benchmarks` module.
+
+### Running Benchmarks
+
+```bash
+# Run all benchmarks
+./gradlew jmh
+
+# Run specific benchmark
+./gradlew jmh --args="PaletteGetBenchmark"
+
+# Run with custom parameters
+./gradlew jmh --args="-f 1 -wi 3 -i 5 PaletteGetBenchmark"
+```
+
+### Key Benchmark Areas
+
+<Accordion title="Palette Operations">
+Benchmarks for block palette read/write operations:
+- `PaletteGetBenchmark` - Block reading performance
+- `PaletteSetBenchmark` - Block writing performance
+- `PaletteReplaceBenchmark` - Block replacement performance
+
+These benchmarks help optimize the core chunk storage system.
+</Accordion>
+
+<Accordion title="Event System">
+Benchmarks for event dispatching:
+- `SingleNodeBenchmark` - Single event node performance
+- `MultiNodeBenchmark` - Multiple event node performance
+
+The event system is critical for server performance as it's used extensively.
+</Accordion>
+
+<Accordion title="Tag System">
+Benchmarks for NBT tag operations:
+- `TagReadBenchmark` - Tag reading performance
+- `TagWriteBenchmark` - Tag writing performance
+- `TagReadPathBenchmark` - Nested tag access
+- `TagWritePathBenchmark` - Nested tag modification
+</Accordion>
+
+<Accordion title="Threading">
+Benchmarks for the acquirable system:
+- `AcquirableSyncBenchmark` - Acquisition overhead testing
+- `SchedulerTickBenchmark` - Scheduler performance
+
+Critical for understanding multi-threading overhead.
+</Accordion>
+
+### Writing Custom Benchmarks
+
+```java
+import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.infra.Blackhole;
+import java.util.concurrent.TimeUnit;
+
+@Warmup(iterations = 5, time = 1000, timeUnit = TimeUnit.MILLISECONDS)
+@Measurement(iterations = 10, time = 1000, timeUnit = TimeUnit.MILLISECONDS)
+@Fork(3)
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@State(Scope.Benchmark)
+public class CustomBenchmark {
+    
+    private Instance instance;
+    
+    @Setup
+    public void setup() {
+        // Initialize test data
+        instance = createTestInstance();
+    }
+    
+    @Benchmark
+    public void benchmarkOperation(Blackhole blackhole) {
+        // Perform operation to benchmark
+        var result = instance.getBlock(0, 0, 0);
+        blackhole.consume(result);
+    }
+}
+```
+
+## Production Checklist
+
+<CardGroup cols={2}>
+  <Card title="Chunk Settings" icon="cube">
+    - Set appropriate view distance (6-10)
+    - Configure chunk update rate limits
+    - Optimize chunk loading strategy
+  </Card>
+  
+  <Card title="Network Settings" icon="network-wired">
+    - Configure buffer sizes for your bandwidth
+    - Enable packet optimizations
+    - Set rate limits to prevent abuse
+  </Card>
+  
+  <Card title="Threading" icon="microchip">
+    - Test dispatcher thread count
+    - Use acquirable API correctly
+    - Avoid blocking operations on tick threads
+  </Card>
+  
+  <Card title="Monitoring" icon="chart-line">
+    - Monitor tick time with `/tick` command
+    - Track memory usage
+    - Run benchmarks for your workload
+  </Card>
+</CardGroup>
+
+## Advanced Flags
+
+### Tag System Optimization
+
+```java
+// Enable tag handler caching (default: true)
+-Dminestom.tag-handler-cache=true
+
+// Serialize empty NBT compounds (default: false)
+-Dminestom.serialization.serialize-empty-nbt-compound=false
+```
+
+### Experimental Features
+
+<Warning>
+Experimental flags may be removed or changed without notice. Use with caution in production.
+</Warning>
+
+```java
+// Enable unsafe registry operations (default: false)
+-Dminestom.registry.unsafe-ops=false
+
+// Allow event nodes with multiple parents (default: false)
+-Dminestom.event.multiple-parents=false
+
+// Enable faster socket writes (default: false)
+-Dminestom.new-socket-write-lock=false
+
+// Strict acquirable ownership checking (default: false)
+-Dminestom.acquirable-strict=false
+
+// Enable unsafe collections (default: false)
+-Dminestom.unsafe-collections=false
+```
+
+### Authentication Settings
+
+```java
+// Mojang authentication URL
+-Dminestom.auth.url=https://sessionserver.mojang.com/session/minecraft/hasJoined
+
+// Prevent proxy connections (default: false)
+-Dminestom.auth.prevent-proxy-connections=false
+```
+
+## Performance Monitoring
+
+### Built-in Metrics
+
+Minestom tracks several performance metrics automatically:
+
+```java
+import net.minestom.server.thread.Acquirable;
+import net.minestom.server.monitoring.TickMonitor;
+
+public class PerformanceTracking {
+    public void monitorPerformance(MinecraftServer server) {
+        // Get acquiring time (time spent waiting for locks)
+        long acquiringTime = Acquirable.resetAcquiringTime();
+        System.out.println("Time spent acquiring: " + acquiringTime + "ns");
+        
+        // Monitor tick time
+        server.getSchedulerManager().buildTask(() -> {
+            TickMonitor monitor = server.getServer().getCurrentTickMonitor();
+            System.out.println("Tick time: " + monitor.getTickTime() + "ms");
+        }).repeat(100).schedule();
+    }
+}
+```
+
+<Info>
+Regularly monitor acquiring time. High values indicate thread contention and potential performance bottlenecks.
+</Info>
+
+## Common Performance Issues
+
+### Issue: Low TPS
+
+**Symptoms**: Server falls behind, high tick times
+
+**Solutions**:
+1. Reduce chunk view distance
+2. Lower entity count
+3. Optimize custom tick logic
+4. Check for blocking I/O operations
+
+### Issue: High Memory Usage
+
+**Symptoms**: Frequent garbage collection, OOM errors
+
+**Solutions**:
+1. Reduce loaded chunks
+2. Clear unused instances
+3. Profile with Java Flight Recorder
+4. Check for memory leaks in custom code
+
+### Issue: Network Lag
+
+**Symptoms**: Players experience delay despite good TPS
+
+**Solutions**:
+1. Increase socket buffer sizes
+2. Enable packet optimizations
+3. Reduce packet sending rate
+4. Check network bandwidth
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing" href="/advanced/testing">
+    Learn how to write performance tests
+  </Card>
+  <Card title="Extensions" href="/advanced/extensions">
+    Optimize custom extension code
+  </Card>
+</CardGroup>

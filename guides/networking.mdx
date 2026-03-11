@@ -1,0 +1,451 @@
+---
+title: 'Networking'
+description: 'Understand the packet system, handle custom packets, and manage player connections'
+---
+
+Minestom's networking layer provides full control over packet handling and player connections. This guide covers the connection lifecycle, packet system, and custom networking.
+
+## Connection Manager
+
+The `ConnectionManager` handles all player connections and their lifecycle.
+
+### Accessing Connection Manager
+
+```java
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.network.ConnectionManager;
+
+ConnectionManager connectionManager = MinecraftServer.getConnectionManager();
+
+// Get online player count
+int playerCount = connectionManager.getOnlinePlayerCount();
+
+// Get all online players
+Collection<Player> players = connectionManager.getOnlinePlayers();
+
+// Get players in configuration state
+Collection<Player> configPlayers = connectionManager.getConfigPlayers();
+```
+
+### Player Provider
+
+Customize player instantiation:
+
+```java
+import net.minestom.server.network.PlayerProvider;
+
+// Set custom player provider
+connectionManager.setPlayerProvider(new PlayerProvider() {
+    @Override
+    public Player createPlayer(UUID uuid, String username, PlayerConnection connection) {
+        return new CustomPlayer(uuid, username, connection);
+    }
+});
+```
+
+## Connection Lifecycle
+
+Players go through several states when connecting:
+
+<Steps>
+  <Step title="Handshake">
+    Initial connection and protocol version negotiation
+  </Step>
+  
+  <Step title="Login">
+    Authentication and player profile loading
+  </Step>
+  
+  <Step title="Configuration">
+    Server sends registries, data packs, and configuration
+  </Step>
+  
+  <Step title="Play">
+    Player spawns and begins playing
+  </Step>
+</Steps>
+
+### Connection Events
+
+```java
+import net.minestom.server.event.player.*;
+
+// Pre-login (before player object exists)
+eventNode.addListener(AsyncPlayerPreLoginEvent.class, event -> {
+    String username = event.getUsername();
+    UUID uuid = event.getPlayerUuid();
+    
+    // Kick player before login
+    if (isBanned(username)) {
+        event.getPlayer().kick(Component.text("You are banned!"));
+    }
+});
+
+// Configuration phase
+eventNode.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+    Player player = event.getPlayer();
+    
+    // Set spawning instance
+    Instance instance = MinecraftServer.getInstanceManager()
+        .getInstances().stream().findFirst().orElse(null);
+    event.setSpawningInstance(instance);
+    
+    // Set spawn position
+    player.setRespawnPoint(new Pos(0, 40, 0));
+    
+    // Add/remove feature flags
+    event.removeFeatureFlag(FeatureFlag.TRADE_REBALANCE);
+});
+
+// Player spawn
+eventNode.addListener(PlayerSpawnEvent.class, event -> {
+    Player player = event.getPlayer();
+    
+    if (event.isFirstSpawn()) {
+        player.sendMessage(Component.text("Welcome to the server!"));
+    }
+});
+
+// Disconnect
+eventNode.addListener(PlayerDisconnectEvent.class, event -> {
+    Player player = event.getPlayer();
+    System.out.println(player.getUsername() + " disconnected");
+});
+```
+
+## Packet System
+
+Minestom provides access to all Minecraft packets.
+
+### Sending Packets
+
+```java
+import net.minestom.server.network.packet.server.play.*;
+
+// Send packet to player
+player.sendPacket(new SetTitleTextPacket(Component.text("Hello!")));
+
+// Send packet to multiple players
+for (Player p : players) {
+    p.sendPacket(new EntityAnimationPacket(entity.getEntityId(), 
+        EntityAnimationPacket.Animation.SWING_MAIN_ARM));
+}
+
+// Send to all viewers
+entity.sendPacketToViewers(new EntityMetaDataPacket(
+    entity.getEntityId(), 
+    entity.getMetadataPacket()
+));
+```
+
+### Common Packets
+
+```java
+import net.minestom.server.network.packet.server.play.*;
+
+// Chat message
+player.sendPacket(new SystemChatPacket(
+    Component.text("System message"),
+    false // overlay (action bar)
+));
+
+// Sound
+player.sendPacket(new SoundEffectPacket(
+    SoundEvent.ENTITY_EXPERIENCE_ORB_PICKUP,
+    Sound.Source.PLAYER,
+    player.getPosition(),
+    1.0f, // volume
+    1.0f  // pitch
+));
+
+// Particle
+player.sendPacket(new ParticlePacket(
+    Particle.HEART,
+    true, // long distance
+    player.getPosition().x(),
+    player.getPosition().y() + 2,
+    player.getPosition().z(),
+    0.5f, 0.5f, 0.5f, // offset
+    0.1f, // speed
+    10 // count
+));
+
+// Block change
+player.sendPacket(new BlockChangePacket(
+    new Vec(10, 40, 10),
+    Block.DIAMOND_BLOCK
+));
+```
+
+## Listening to Packets
+
+### Incoming Packet Events
+
+```java
+import net.minestom.server.event.player.PlayerPacketEvent;
+import net.minestom.server.network.packet.client.play.*;
+
+// Listen to all incoming packets
+eventNode.addListener(PlayerPacketEvent.class, event -> {
+    ClientPacket packet = event.getPacket();
+    System.out.println("Received: " + packet.getClass().getSimpleName());
+    
+    // Handle specific packet types
+    if (packet instanceof ClientChatMessagePacket chatPacket) {
+        String message = chatPacket.message();
+        System.out.println("Chat: " + message);
+    }
+});
+```
+
+### Outgoing Packet Events
+
+```java
+import net.minestom.server.event.player.PlayerPacketOutEvent;
+
+// Listen to all outgoing packets
+eventNode.addListener(PlayerPacketOutEvent.class, event -> {
+    ServerPacket packet = event.getPacket();
+    System.out.println("Sending: " + packet.getClass().getSimpleName());
+});
+```
+
+<Warning>
+Modifying packets in these events can break protocol compliance. Use with caution.
+</Warning>
+
+## Custom Packets
+
+### Plugin Messages
+
+Send custom data using plugin channels:
+
+```java
+import net.minestom.server.network.packet.server.common.PluginMessagePacket;
+import net.minestom.server.network.packet.client.common.ClientPluginMessagePacket;
+
+// Send plugin message
+String channel = "myserver:custom";
+byte[] data = "Hello, client!".getBytes();
+
+player.sendPacket(new PluginMessagePacket(channel, data));
+
+// Receive plugin message
+eventNode.addListener(PlayerPacketEvent.class, event -> {
+    if (event.getPacket() instanceof ClientPluginMessagePacket packet) {
+        String channel = packet.channel();
+        byte[] data = packet.data();
+        
+        System.out.println("Received plugin message on " + channel);
+    }
+});
+```
+
+### Custom Payload
+
+```java
+import net.minestom.server.utils.binary.BinaryWriter;
+import net.minestom.server.utils.binary.BinaryReader;
+
+// Write custom data
+BinaryWriter writer = new BinaryWriter();
+writer.writeVarInt(42);
+writer.writeSizedString("test");
+writer.writeDouble(3.14);
+
+byte[] data = writer.toByteArray();
+
+// Read custom data
+BinaryReader reader = new BinaryReader(data);
+int value = reader.readVarInt();
+String text = reader.readSizedString();
+double number = reader.readDouble();
+```
+
+## Keep Alive
+
+Minestom automatically handles keep-alive packets, but you can customize the behavior:
+
+```java
+// Keep alive packets are sent automatically
+// Listen for timeout
+eventNode.addListener(PlayerDisconnectEvent.class, event -> {
+    // Check if timed out
+    if (event.getPlayer().didTimeout()) {
+        System.out.println("Player timed out");
+    }
+});
+```
+
+## Connection State
+
+Check and manage player connection state:
+
+```java
+import net.minestom.server.network.ConnectionState;
+
+// Get connection state
+ConnectionState state = player.getPlayerConnection().getConnectionState();
+
+switch (state) {
+    case HANDSHAKE -> System.out.println("Handshaking");
+    case LOGIN -> System.out.println("Logging in");
+    case CONFIGURATION -> System.out.println("Configuring");
+    case PLAY -> System.out.println("Playing");
+}
+
+// Start reconfiguration
+player.startConfigurationPhase();
+```
+
+## Player Connection
+
+### Getting Connection Info
+
+```java
+import net.minestom.server.network.player.PlayerConnection;
+
+PlayerConnection connection = player.getPlayerConnection();
+
+// Get address
+SocketAddress address = connection.getRemoteAddress();
+System.out.println("Player IP: " + address);
+
+// Get protocol version
+int protocol = connection.getProtocolVersion();
+
+// Get server address (what the player typed)
+String serverAddress = connection.getServerAddress();
+int serverPort = connection.getServerPort();
+```
+
+### Kicking Players
+
+```java
+// Kick with reason
+player.kick(Component.text("You have been kicked!", NamedTextColor.RED));
+
+// Kick all players
+for (Player p : connectionManager.getOnlinePlayers()) {
+    p.kick(Component.text("Server restarting"));
+}
+```
+
+## Server List Ping
+
+Customize the server list response:
+
+```java
+import net.minestom.server.event.server.ServerListPingEvent;
+import net.minestom.server.ping.Status;
+
+eventNode.addListener(ServerListPingEvent.class, event -> {
+    int onlinePlayers = connectionManager.getOnlinePlayers().size();
+    
+    Status.PlayerInfo.Builder playerInfo = Status.PlayerInfo
+        .builder(Status.PlayerInfo.online(20))
+        .sample("Player 1")
+        .sample("Player 2")
+        .sample(Component.text("Colored sample", NamedTextColor.GOLD));
+    
+    event.setStatus(Status.builder()
+        .description(Component.text("My Minestom Server", TextColor.color(0x66b3ff)))
+        .playerInfo(playerInfo.build())
+        .build());
+});
+```
+
+## Network Buffer
+
+For advanced packet handling:
+
+```java
+import net.minestom.server.network.NetworkBuffer;
+
+// Write to buffer
+NetworkBuffer buffer = NetworkBuffer.resizableBuffer();
+buffer.write(NetworkBuffer.VAR_INT, 42);
+buffer.write(NetworkBuffer.STRING, "Hello");
+buffer.write(NetworkBuffer.BOOLEAN, true);
+
+// Read from buffer
+int value = buffer.read(NetworkBuffer.VAR_INT);
+String text = buffer.read(NetworkBuffer.STRING);
+boolean flag = buffer.read(NetworkBuffer.BOOLEAN);
+```
+
+## Complete Example: Login System
+
+```java
+import net.minestom.server.event.player.*;
+import net.minestom.server.entity.Player;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class LoginSystem {
+    private final Set<UUID> loggedIn = ConcurrentHashMap.newKeySet();
+    
+    public void setup(EventNode<Event> eventNode) {
+        // Handle login
+        eventNode.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+            Player player = event.getPlayer();
+            
+            // Check if already logged in
+            if (isLoggedIn(player.getUuid())) {
+                player.kick(Component.text("Already logged in!"));
+                return;
+            }
+            
+            // Set spawn instance
+            event.setSpawningInstance(getSpawnInstance());
+        });
+        
+        // Send login message
+        eventNode.addListener(PlayerSpawnEvent.class, event -> {
+            Player player = event.getPlayer();
+            
+            if (event.isFirstSpawn()) {
+                loggedIn.add(player.getUuid());
+                
+                player.sendMessage(Component.text(
+                    "Welcome, " + player.getUsername() + "!",
+                    NamedTextColor.GREEN
+                ));
+                
+                // Send custom packet
+                player.sendPacket(new ServerLinksPacket(
+                    new ServerLinksPacket.Entry(
+                        Component.text("Website"),
+                        "https://example.com"
+                    )
+                ));
+            }
+        });
+        
+        // Handle disconnect
+        eventNode.addListener(PlayerDisconnectEvent.class, event -> {
+            loggedIn.remove(event.getPlayer().getUuid());
+        });
+    }
+    
+    private boolean isLoggedIn(UUID uuid) {
+        return loggedIn.contains(uuid);
+    }
+    
+    private Instance getSpawnInstance() {
+        return MinecraftServer.getInstanceManager()
+            .getInstances().stream().findFirst().orElse(null);
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Commands" icon="terminal" href="/guides/commands">
+    Handle player commands and input
+  </Card>
+  <Card title="Entities" icon="dragon" href="/guides/entities">
+    Manage entity packets and synchronization
+  </Card>
+</CardGroup>

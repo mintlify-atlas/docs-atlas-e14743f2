@@ -1,0 +1,489 @@
+---
+title: Threading Model
+description: Understanding Minestom's multi-threaded tick system
+---
+
+## Overview
+
+Minestom's threading model is one of its most powerful features. Unlike traditional Minecraft servers that run everything on a single thread, Minestom distributes the workload across multiple threads for better performance.
+
+<Info>
+Minestom can tick multiple chunks and their entities in parallel, dramatically improving performance on multi-core systems.
+</Info>
+
+## Thread Architecture
+
+Minestom uses three main types of threads:
+
+### 1. Tick Scheduler Thread
+
+The main thread that coordinates all server ticks:
+
+```java TickSchedulerThread.java:23-45
+@Override
+public void run() {
+    long ticks = 0;
+    long baseTime = System.nanoTime();
+    while (serverProcess.isAlive()) {
+        final long tickStart = System.nanoTime();
+        try {
+            serverProcess.ticker().tick(tickStart);
+        } catch (Throwable e) {
+            serverProcess.exception().handleException(e);
+        }
+        
+        ticks++;
+        long nextTickTime = baseTime + ticks * TICK_TIME_NANOS;
+        waitUntilNextTick(nextTickTime);
+        
+        // Check if server can't keep up
+        if (System.nanoTime() > nextTickTime + TICK_TIME_NANOS * SERVER_MAX_TICK_CATCH_UP) {
+            baseTime = System.nanoTime();
+            ticks = 0;
+        }
+    }
+}
+```
+
+**Responsibilities:**
+- Maintain consistent tick rate (default 20 TPS)
+- Invoke the server ticker
+- Handle tick timing and catch-up logic
+
+### 2. Tick Threads (Dispatcher)
+
+Worker threads that process chunks and entities:
+
+```java ThreadDispatcher.java:36-38
+static <P, E extends Tickable> ThreadDispatcher<P, E> dispatcher(
+    ThreadProvider<P> provider, 
+    int threadCount
+) {
+    return new ThreadDispatcherImpl<>(provider, threadCount, TickThread::new);
+}
+```
+
+**Responsibilities:**
+- Tick chunks in parallel
+- Tick entities within those chunks
+- Execute chunk-local operations
+
+<Tip>
+The number of tick threads is controlled by `ServerFlag.DISPATCHER_THREADS` (default: 1). Increase this for better multi-core utilization.
+</Tip>
+
+### 3. Network Thread
+
+Handles all network I/O operations:
+- Reading packets from clients
+- Writing packets to clients
+- Connection management
+
+<Note>
+Network operations are completely separate from ticking, preventing slow connections from affecting server performance.
+</Note>
+
+## The Tick Cycle
+
+Each server tick follows this sequence:
+
+### 1. Pre-Tick Phase
+
+```java
+// Dispatcher processes pending updates
+dispatcher.refreshThreads();
+
+// Updates include:
+// - Partition loads (new chunks)
+// - Partition unloads (removed chunks)
+// - Element updates (entity changes)
+// - Element removes (entity removal)
+```
+
+### 2. Parallel Tick Phase
+
+```java ThreadDispatcher.java:85
+dispatcher.updateAndAwait(nanoTime);
+```
+
+The dispatcher:
+1. **Distributes chunks** across tick threads
+2. **Ticks each chunk** on its assigned thread
+3. **Ticks entities** within each chunk
+4. **Waits for completion** of all threads
+
+### 3. Post-Tick Phase
+
+```java
+// Global operations that must run after all chunks tick
+- Process scheduled tasks
+- Update world border transitions
+- Synchronize time across instances
+- Dispatch tick events
+```
+
+## Tick Configuration
+
+### Ticks Per Second
+
+Control the server tick rate:
+
+```java ServerFlag.java:15
+public static final int SERVER_TICKS_PER_SECOND = intProperty("minestom.tps", 20);
+```
+
+```java
+// Set before initialization
+System.setProperty("minestom.tps", "30"); // 30 TPS
+MinecraftServer minecraftServer = MinecraftServer.init();
+```
+
+<Warning>
+Increasing TPS makes the server more responsive but increases CPU usage. Most games should stick with 20 TPS for Minecraft compatibility.
+</Warning>
+
+### Tick Catch-Up
+
+When the server falls behind:
+
+```java ServerFlag.java:16
+public static final int SERVER_MAX_TICK_CATCH_UP = intProperty("minestom.max-tick-catch-up", 5);
+```
+
+```java TickSchedulerThread.java:40-43
+if (System.nanoTime() > nextTickTime + TICK_TIME_NANOS * SERVER_MAX_TICK_CATCH_UP) {
+    baseTime = System.nanoTime();
+    ticks = 0; // Reset - stop trying to catch up
+}
+```
+
+This prevents the server from trying to "catch up" indefinitely when it can't keep up with the tick rate.
+
+### Dispatcher Threads
+
+```java ServerFlag.java:20
+public static final int DISPATCHER_THREADS = intProperty("minestom.dispatcher-threads", 1);
+```
+
+```java
+System.setProperty("minestom.dispatcher-threads", "4"); // 4 tick threads
+```
+
+**Guidelines:**
+- **1 thread**: Single-threaded (safest, simplest)
+- **2-4 threads**: Good for most servers
+- **8+ threads**: Only for very large servers with many players
+
+## Thread Dispatcher
+
+The `ThreadDispatcher` is responsible for parallel chunk processing:
+
+### Creating a Dispatcher
+
+```java ThreadDispatcher.java:64-67
+// Create a single-threaded dispatcher
+ThreadDispatcher<Chunk, Entity> dispatcher = ThreadDispatcher.singleThread();
+
+// Create a multi-threaded dispatcher
+ThreadDispatcher<Chunk, Entity> dispatcher = ThreadDispatcher.dispatcher(
+    ThreadProvider.counter(), 
+    4  // 4 threads
+);
+```
+
+### Dispatcher Updates
+
+The dispatcher processes several types of updates:
+
+```java ThreadDispatcher.java:154-188
+sealed interface Update<P, E> {
+    // Register a new partition (chunk)
+    record PartitionLoad<P, E>(P partition) implements Update<P, E> {}
+    
+    // Delete an existing partition
+    record PartitionUnload<P, E>(P partition) implements Update<P, E> {}
+    
+    // Update an element (entity moved to different chunk)
+    record ElementUpdate<P, E>(E element, P partition) implements Update<P, E> {}
+    
+    // Remove an element (entity removed)
+    record ElementRemove<P, E>(E element) implements Update<P, E> {}
+}
+```
+
+### Signaling Updates
+
+```java ThreadDispatcher.java:113-129
+// When a chunk is loaded
+dispatcher.createPartition(chunk);
+
+// When a chunk is unloaded
+dispatcher.deletePartition(chunk);
+
+// When an entity moves to a different chunk
+dispatcher.updateElement(entity, newChunk);
+
+// When an entity is removed
+dispatcher.removeElement(entity);
+```
+
+<Info>
+Minestom automatically handles these updates when you use standard instance methods. Manual signaling is only needed for custom implementations.
+</Info>
+
+## Thread Safety
+
+### Chunk Synchronization
+
+Chunks are ticked on specific threads, but you must synchronize when accessing them from other threads:
+
+```java Instance.java:199-202
+instance.loadChunk(chunkX, chunkZ).thenAccept(chunk -> {
+    synchronized (chunk) {
+        chunk.setBlock(x, y, z, Block.STONE);
+    }
+});
+```
+
+<Warning>
+Always use `synchronized (chunk)` when modifying chunks outside of the tick thread to prevent race conditions.
+</Warning>
+
+### Entity Synchronization
+
+Entities should only be modified from:
+1. Their tick thread
+2. The main thread (with `Acquirable`)
+3. Event handlers (automatically synchronized)
+
+```java
+// Safe - in an event handler
+eventNode.addListener(PlayerMoveEvent.class, event -> {
+    event.getPlayer().sendMessage("You moved!");
+});
+
+// Safe - using scheduler
+player.scheduler().scheduleNextTick(() -> {
+    player.setHealth(20.0f);
+});
+
+// Unsafe - direct modification from another thread
+// DON'T DO THIS
+new Thread(() -> {
+    player.setHealth(20.0f); // WRONG!
+}).start();
+```
+
+## Acquirable API
+
+For advanced thread-safe entity access:
+
+```java
+// Acquire exclusive access to an entity
+Acquirable<Entity> acquirable = entity.acquirable();
+acquirable.sync(e -> {
+    // This block has exclusive access to the entity
+    e.setVelocity(new Vec(0, 10, 0));
+});
+
+// Or asynchronously
+acquirable.async(e -> {
+    e.setCustomName(Component.text("Updated"));
+}).thenRun(() -> {
+    System.out.println("Entity updated!");
+});
+```
+
+<Tip>
+The `Acquirable` API ensures thread-safe access by guaranteeing only one thread can access the entity at a time.
+</Tip>
+
+## Scheduled Tasks
+
+### Instance Scheduler
+
+Schedule tasks to run on an instance's tick:
+
+```java Instance.java:186-188
+instance.scheduleNextTick(inst -> {
+    // Runs during the next instance tick
+    inst.setTime(12000);
+});
+```
+
+### Global Scheduler
+
+```java
+SchedulerManager scheduler = MinecraftServer.getSchedulerManager();
+
+// Run once after delay
+scheduler.buildTask(() -> {
+    System.out.println("5 seconds later...");
+}).delay(5, TimeUnit.SECOND).schedule();
+
+// Run repeatedly
+scheduler.buildTask(() -> {
+    System.out.println("Every second");
+}).repeat(1, TimeUnit.SECOND).schedule();
+
+// Run on shutdown
+scheduler.buildShutdownTask(() -> {
+    System.out.println("Server stopping...");
+});
+```
+
+### Entity Scheduler
+
+Schedule tasks to run during an entity's tick:
+
+```java
+player.scheduler().scheduleNextTick(() -> {
+    player.teleport(new Pos(0, 100, 0));
+});
+
+player.scheduler().buildTask(() -> {
+    player.sendMessage("Periodic message!");
+}).repeat(5, TimeUnit.SECOND).schedule();
+```
+
+<Note>
+Tasks scheduled on entities or instances automatically run on the correct tick thread, making them thread-safe.
+</Note>
+
+## Performance Optimization
+
+### Chunk Distribution
+
+The thread provider determines how chunks are distributed across threads:
+
+```java
+// Round-robin (default)
+ThreadProvider<Chunk> provider = ThreadProvider.counter();
+
+// Custom distribution
+ThreadProvider<Chunk> provider = chunk -> {
+    // Assign based on chunk coordinates
+    return Math.abs(chunk.hashCode() % threadCount);
+};
+```
+
+### Monitoring Performance
+
+```java Main.java:100
+MinecraftServer.getBenchmarkManager().enable(Duration.of(10, TimeUnit.SECOND));
+```
+
+Track tick performance:
+
+```java PlayerInit.java:442-460
+eventHandler.addListener(ServerTickMonitorEvent.class, event -> {
+    TickMonitor monitor = event.getTickMonitor();
+    double tickTime = monitor.getTickTime();
+    double acquisitionTime = monitor.getAcquisitionTime();
+    
+    if (tickTime > 50) {
+        System.out.println("Tick took too long: " + tickTime + "ms");
+    }
+});
+```
+
+### Best Practices
+
+1. **Minimize cross-chunk operations** - Keep entity logic within single chunks when possible
+2. **Use batch operations** - Modify many blocks at once with proper synchronization
+3. **Avoid blocking operations** - Don't do I/O or heavy computation during ticks
+4. **Use async alternatives** - Load chunks, save data, etc. asynchronously
+5. **Profile your code** - Use the benchmark manager to identify bottlenecks
+
+## Threading Gotchas
+
+### Don't Mix Threads
+
+```java
+// WRONG - Don't access entities from arbitrary threads
+CompletableFuture.runAsync(() -> {
+    entity.setHealth(20.0f); // Race condition!
+});
+
+// RIGHT - Use the scheduler
+entity.scheduler().scheduleNextTick(() -> {
+    entity.setHealth(20.0f);
+});
+```
+
+### Don't Block Tick Threads
+
+```java
+// WRONG - Don't do I/O during ticks
+instance.tick(time -> {
+    File file = new File("data.txt");
+    String data = Files.readString(file.toPath()); // Blocks the tick thread!
+});
+
+// RIGHT - Do I/O asynchronously
+CompletableFuture.supplyAsync(() -> {
+    return Files.readString(Path.of("data.txt"));
+}).thenAccept(data -> {
+    // Use the data
+});
+```
+
+### Don't Forget Synchronization
+
+```java
+// WRONG - No synchronization
+Chunk chunk = instance.getChunk(x, z);
+chunk.setBlock(0, 64, 0, Block.STONE);
+
+// RIGHT - Synchronize chunk access
+Chunk chunk = instance.getChunk(x, z);
+synchronized (chunk) {
+    chunk.setBlock(0, 64, 0, Block.STONE);
+}
+```
+
+## Advanced: Custom Thread Providers
+
+For advanced users, you can create custom thread providers:
+
+```java
+public class RegionThreadProvider implements ThreadProvider<Chunk> {
+    private final int threadCount;
+    private final int regionSize;
+    
+    public RegionThreadProvider(int threadCount, int regionSize) {
+        this.threadCount = threadCount;
+        this.regionSize = regionSize;
+    }
+    
+    @Override
+    public int findThread(Chunk chunk) {
+        // Group chunks into regions
+        int regionX = chunk.getChunkX() / regionSize;
+        int regionZ = chunk.getChunkZ() / regionSize;
+        
+        // Assign regions to threads
+        int hash = Objects.hash(regionX, regionZ);
+        return Math.abs(hash % threadCount);
+    }
+}
+
+// Use it
+ThreadDispatcher<Chunk, Entity> dispatcher = ThreadDispatcher.dispatcher(
+    new RegionThreadProvider(4, 8),
+    4
+);
+```
+
+This can improve cache locality by keeping nearby chunks on the same thread.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Events" icon="bolt" href="/core-concepts/events">
+    Learn how events work with the threading system
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/core-concepts/architecture">
+    Understand the overall server architecture
+  </Card>
+</CardGroup>

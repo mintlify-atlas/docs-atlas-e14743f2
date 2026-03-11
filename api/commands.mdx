@@ -1,0 +1,492 @@
+---
+title: Commands API
+description: Command registration, parsing, and execution system
+---
+
+## Overview
+
+Minestom's command system provides a powerful builder API for creating commands with auto-completion, argument parsing, and condition checking.
+
+## CommandManager
+
+Manager used to register and execute commands.
+
+### Registration
+
+<ResponseField name="register" type="void">
+  Registers a command
+  
+  <Expandable title="parameters">
+    <ParamField path="command" type="Command">
+      The command to register
+    </ParamField>
+  </Expandable>
+  
+  Throws `IllegalStateException` if a command with the same name already exists
+</ResponseField>
+
+<ResponseField name="unregister" type="void">
+  Removes a command from registered commands
+  
+  <Expandable title="parameters">
+    <ParamField path="command" type="Command">
+      The command to remove
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getCommand" type="Command">
+  Gets a registered command by name
+  
+  <Expandable title="parameters">
+    <ParamField path="commandName" type="String">
+      The command name (case-insensitive)
+    </ParamField>
+  </Expandable>
+  
+  Returns `null` if not found
+</ResponseField>
+
+<ResponseField name="commandExists" type="boolean">
+  Checks if a command exists
+  
+  <Expandable title="parameters">
+    <ParamField path="commandName" type="String">
+      The command name to check
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Execution
+
+<ResponseField name="execute" type="CommandResult">
+  Executes a command for a CommandSender
+  
+  <Expandable title="parameters">
+    <ParamField path="sender" type="CommandSender">
+      The sender of the command
+    </ParamField>
+    <ParamField path="command" type="String">
+      The raw command string (without prefix)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="executeServerCommand" type="CommandResult">
+  Executes a command using a ServerSender (silent, nothing printed to console)
+  
+  <Expandable title="parameters">
+    <ParamField path="command" type="String">
+      The command to execute
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Callbacks
+
+<ResponseField name="setUnknownCommandCallback" type="void">
+  Sets the callback executed when an unknown command is run
+  
+  <Expandable title="parameters">
+    <ParamField path="callback" type="CommandCallback">
+      The callback (null to remove)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getConsoleSender" type="ConsoleSender">
+  Gets the ConsoleSender instance for executing commands from console
+</ResponseField>
+
+<ResponseField name="createDeclareCommandsPacket" type="DeclareCommandsPacket">
+  Creates the commands packet for a specific player (for auto-completion)
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to get the commands packet for
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+## Command
+
+Represents a command with suggestion/auto-completion support.
+
+### Creating Commands
+
+<CodeGroup>
+```java Basic Command
+Command command = new Command("teleport", "tp");
+
+command.setDefaultExecutor((sender, context) -> {
+    sender.sendMessage("Usage: /teleport <player>");
+});
+
+command.addSyntax((sender, context) -> {
+    Player target = context.get("target");
+    if (sender instanceof Player player) {
+        player.teleport(target.getPosition());
+    }
+}, ArgumentType.Entity("target").onlyPlayers(true));
+
+MinecraftServer.getCommandManager().register(command);
+```
+
+```java Multiple Syntaxes
+Command health = new Command("health");
+
+health.addSyntax((sender, context) -> {
+    String action = context.get("action");
+    String username = context.get("player");
+    int amount = context.get("amount");
+    
+    // Handle: /health [set/add/remove] <player> <amount>
+}, 
+    ArgumentType.Word("action").from("set", "add", "remove"),
+    ArgumentType.Word("player"),
+    ArgumentType.Integer("amount")
+);
+```
+
+```java With Conditions
+Command admin = new Command("admin");
+
+admin.setCondition((sender, commandString) -> {
+    if (sender instanceof Player player) {
+        return player.hasPermission("admin.use");
+    }
+    return true;
+});
+
+admin.setDefaultExecutor((sender, context) -> {
+    sender.sendMessage("Admin command executed");
+});
+```
+</CodeGroup>
+
+### Command Methods
+
+<ResponseField name="addSyntax" type="Collection<CommandSyntax>">
+  Adds a new syntax to the command
+  
+  <Expandable title="parameters">
+    <ParamField path="executor" type="CommandExecutor">
+      The executor called when syntax is matched
+    </ParamField>
+    <ParamField path="args" type="Argument<?>...">
+      The arguments for this syntax
+    </ParamField>
+  </Expandable>
+  
+  Returns the created syntaxes (multiple if optional arguments are used)
+</ResponseField>
+
+<ResponseField name="addConditionalSyntax" type="Collection<CommandSyntax>">
+  Adds a syntax with a condition
+  
+  <Expandable title="parameters">
+    <ParamField path="condition" type="CommandCondition">
+      The condition to use the syntax
+    </ParamField>
+    <ParamField path="executor" type="CommandExecutor">
+      The executor
+    </ParamField>
+    <ParamField path="args" type="Argument<?>...">
+      The arguments
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setDefaultExecutor" type="void">
+  Sets the executor called when no syntax matches
+  
+  <Expandable title="parameters">
+    <ParamField path="executor" type="CommandExecutor">
+      The default executor (null to remove)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setCondition" type="void">
+  Sets the command condition (checked before execution)
+  
+  <Expandable title="parameters">
+    <ParamField path="condition" type="CommandCondition">
+      The condition (null to remove)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setArgumentCallback" type="void">
+  Sets a callback for argument errors
+  
+  <Expandable title="parameters">
+    <ParamField path="callback" type="ArgumentCallback">
+      The callback
+    </ParamField>
+    <ParamField path="argument" type="Argument<?>">
+      The argument to attach callback to
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="addSubcommand" type="void">
+  Adds a subcommand
+  
+  <Expandable title="parameters">
+    <ParamField path="command" type="Command">
+      The subcommand to add
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="getName" type="String">
+  Gets the main command name
+</ResponseField>
+
+<ResponseField name="getAliases" type="String[]">
+  Gets all command aliases
+</ResponseField>
+
+<ResponseField name="getSyntaxes" type="Collection<CommandSyntax>">
+  Gets all syntaxes of this command
+</ResponseField>
+
+## Argument Types
+
+The `ArgumentType` class provides factory methods for all built-in argument types.
+
+### Basic Arguments
+
+<ParamField path="ArgumentType.Boolean(id)" type="ArgumentBoolean">
+  Parses boolean values (true/false)
+</ParamField>
+
+<ParamField path="ArgumentType.Integer(id)" type="ArgumentInteger">
+  Parses integer values
+  
+  <Expandable title="methods">
+    - `min(int)` - Set minimum value
+    - `max(int)` - Set maximum value
+    - `between(int, int)` - Set range
+  </Expandable>
+</ParamField>
+
+<ParamField path="ArgumentType.Double(id)" type="ArgumentDouble">
+  Parses double values
+  
+  <Expandable title="methods">
+    - `min(double)` - Set minimum value
+    - `max(double)` - Set maximum value
+    - `between(double, double)` - Set range
+  </Expandable>
+</ParamField>
+
+<ParamField path="ArgumentType.Float(id)" type="ArgumentFloat">
+  Parses float values
+</ParamField>
+
+<ParamField path="ArgumentType.Long(id)" type="ArgumentLong">
+  Parses long values
+</ParamField>
+
+<ParamField path="ArgumentType.String(id)" type="ArgumentString">
+  Parses string values (quoted or single word)
+</ParamField>
+
+<ParamField path="ArgumentType.Word(id)" type="ArgumentWord">
+  Parses a single word (no spaces)
+  
+  <Expandable title="methods">
+    - `from(String...)` - Restrict to specific words
+  </Expandable>
+</ParamField>
+
+<ParamField path="ArgumentType.StringArray(id)" type="ArgumentStringArray">
+  Parses remaining arguments as string array
+</ParamField>
+
+### Minecraft-Specific Arguments
+
+<ParamField path="ArgumentType.Entity(id)" type="ArgumentEntity">
+  Parses entity selectors (@p, @a, @e, etc.)
+  
+  <Expandable title="methods">
+    - `onlyPlayers(boolean)` - Only allow player selection
+    - `singleEntity(boolean)` - Only allow single entity
+  </Expandable>
+</ParamField>
+
+<ParamField path="ArgumentType.ItemStack(id)" type="ArgumentItemStack">
+  Parses item stack with optional NBT
+</ParamField>
+
+<ParamField path="ArgumentType.BlockState(id)" type="ArgumentBlockState">
+  Parses block state with properties
+</ParamField>
+
+<ParamField path="ArgumentType.Color(id)" type="ArgumentColor">
+  Parses chat colors
+</ParamField>
+
+<ParamField path="ArgumentType.Component(id)" type="ArgumentComponent">
+  Parses JSON text components
+</ParamField>
+
+<ParamField path="ArgumentType.NBT(id)" type="ArgumentNbtTag">
+  Parses NBT tags
+</ParamField>
+
+<ParamField path="ArgumentType.NbtCompound(id)" type="ArgumentNbtCompoundTag">
+  Parses NBT compound tags
+</ParamField>
+
+<ParamField path="ArgumentType.RelativeBlockPosition(id)" type="ArgumentRelativeBlockPosition">
+  Parses block positions (supports relative coordinates)
+</ParamField>
+
+<ParamField path="ArgumentType.RelativeVec3(id)" type="ArgumentRelativeVec3">
+  Parses 3D vectors (supports relative coordinates)
+</ParamField>
+
+<ParamField path="ArgumentType.UUID(id)" type="ArgumentUUID">
+  Parses UUIDs
+</ParamField>
+
+<ParamField path="ArgumentType.Time(id)" type="ArgumentTime">
+  Parses time values (with units: s, t, d)
+</ParamField>
+
+<ParamField path="ArgumentType.Resource(id, identifier)" type="ArgumentResource">
+  Parses resource locations from a registry
+</ParamField>
+
+<ParamField path="ArgumentType.Particle(id)" type="ArgumentParticle">
+  Parses particle types with data
+</ParamField>
+
+### Argument Utilities
+
+<ParamField path="ArgumentType.Literal(id)" type="ArgumentLiteral">
+  Matches a literal string (for subcommands)
+</ParamField>
+
+<ParamField path="ArgumentType.Group(id, args)" type="ArgumentGroup">
+  Groups multiple arguments
+</ParamField>
+
+<ParamField path="ArgumentType.Loop(id, args)" type="ArgumentLoop<T>">
+  Repeats argument pattern
+</ParamField>
+
+## Argument Customization
+
+All argument types extend the base `Argument<T>` class with these methods:
+
+<ResponseField name="setDefaultValue" type="Argument<T>">
+  Sets a default value (makes argument optional)
+  
+  <Expandable title="parameters">
+    <ParamField path="defaultValue" type="T | Supplier<T> | Function<CommandSender, T>">
+      The default value or supplier
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setSuggestionCallback" type="Argument<T>">
+  Sets custom tab-completion suggestions
+  
+  <Expandable title="parameters">
+    <ParamField path="callback" type="SuggestionCallback">
+      The suggestion callback
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setCallback" type="void">
+  Sets error callback for this argument
+  
+  <Expandable title="parameters">
+    <ParamField path="callback" type="ArgumentCallback">
+      The error callback
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="map" type="Argument<O>">
+  Maps argument output to another type
+  
+  <Expandable title="parameters">
+    <ParamField path="mapper" type="Function<T, O>">
+      The mapper function
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="filter" type="Argument<T>">
+  Adds a filter predicate
+  
+  <Expandable title="parameters">
+    <ParamField path="predicate" type="Predicate<T>">
+      The filter predicate
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+## Usage Examples
+
+<CodeGroup>
+```java Gamemode Command
+Command gamemode = new Command("gamemode", "gm");
+
+gamemode.addSyntax((sender, context) -> {
+    if (!(sender instanceof Player player)) {
+        sender.sendMessage("Only players can use this command");
+        return;
+    }
+    
+    int mode = context.get("mode");
+    player.setGameMode(GameMode.values()[mode]);
+    player.sendMessage("Gamemode changed to " + mode);
+}, ArgumentType.Integer("mode").between(0, 3));
+
+MinecraftServer.getCommandManager().register(gamemode);
+```
+
+```java Give Command
+Command give = new Command("give");
+
+give.addSyntax((sender, context) -> {
+    Player target = context.get("player");
+    ItemStack item = context.get("item");
+    int amount = context.get("amount");
+    
+    item = item.withAmount(amount);
+    target.getInventory().addItemStack(item);
+    sender.sendMessage("Gave " + amount + " items to " + target.getUsername());
+},
+    ArgumentType.Entity("player").onlyPlayers(true).singleEntity(true),
+    ArgumentType.ItemStack("item"),
+    ArgumentType.Integer("amount").min(1).setDefaultValue(1)
+);
+```
+
+```java Custom Suggestions
+Argument<String> playerArg = ArgumentType.Word("player");
+playerArg.setSuggestionCallback((sender, context, suggestion) -> {
+    MinecraftServer.getConnectionManager().getOnlinePlayers()
+        .forEach(player -> suggestion.addEntry(player.getUsername()));
+});
+
+Command msg = new Command("msg");
+msg.addSyntax((sender, context) -> {
+    String targetName = context.get("player");
+    String message = context.get("message");
+    // Send message...
+}, playerArg, ArgumentType.StringArray("message"));
+```
+</CodeGroup>
+
+<Note>
+  Commands are registered globally through the CommandManager. Each syntax is tried in order until one matches.
+</Note>

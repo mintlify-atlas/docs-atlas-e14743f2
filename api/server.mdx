@@ -1,0 +1,352 @@
+---
+title: 'MinecraftServer'
+description: 'Main server class and ServerProcess interface for managing the Minestom server'
+icon: 'server'
+---
+
+## MinecraftServer Class
+
+The main server class used to initialize, start, and manage the Minestom server. All managers and core functionality are accessed through this class.
+
+### Initialization
+
+<ParamField path="init" type="static MinecraftServer">
+  Initializes the server with offline authentication mode.
+  
+  **Returns:** The MinecraftServer instance
+  
+  ```java
+  MinecraftServer server = MinecraftServer.init();
+  ```
+</ParamField>
+
+<ParamField path="init(Auth)" type="static MinecraftServer">
+  Initializes the server with specified authentication.
+  
+  **Parameters:**
+  - `auth` - Authentication mode (online/offline)
+  
+  **Returns:** The MinecraftServer instance
+  
+  ```java
+  MinecraftServer server = MinecraftServer.init(new Auth.Online());
+  ```
+</ParamField>
+
+### Server Lifecycle
+
+<ParamField path="start(String, int)" type="void">
+  Starts the server on the specified address and port.
+  
+  **Parameters:**
+  - `address` - Server IP address
+  - `port` - Server port number
+  
+  **Throws:** IllegalStateException if called before init() or if server is already running
+  
+  ```java
+  server.start("0.0.0.0", 25565);
+  ```
+</ParamField>
+
+<ParamField path="start(SocketAddress)" type="void">
+  Starts the server on the specified socket address.
+  
+  **Parameters:**
+  - `address` - Server socket address
+  
+  ```java
+  server.start(new InetSocketAddress("localhost", 25565));
+  ```
+</ParamField>
+
+<ParamField path="stopCleanly()" type="static void">
+  Stops the server properly (saves data, kicks players, etc.).
+  
+  ```java
+  MinecraftServer.stopCleanly();
+  ```
+</ParamField>
+
+### Manager Getters
+
+All manager getters are static methods that provide access to core server functionality.
+
+<ParamField path="getInstanceManager()" type="static InstanceManager">
+  Gets the instance manager for managing worlds.
+  
+  **Returns:** The InstanceManager instance
+  
+  ```java
+  InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+  InstanceContainer world = instanceManager.createInstanceContainer();
+  ```
+</ParamField>
+
+<ParamField path="getConnectionManager()" type="static ConnectionManager">
+  Gets the connection manager for handling player connections.
+  
+  **Returns:** The ConnectionManager instance
+  
+  ```java
+  ConnectionManager connectionManager = MinecraftServer.getConnectionManager();
+  Collection<Player> players = connectionManager.getOnlinePlayers();
+  ```
+</ParamField>
+
+<ParamField path="getBlockManager()" type="static BlockManager">
+  Gets the block manager for registering block handlers and placement rules.
+  
+  **Returns:** The BlockManager instance
+  
+  ```java
+  BlockManager blockManager = MinecraftServer.getBlockManager();
+  blockManager.registerHandler("custom:block", () -> new MyBlockHandler());
+  ```
+</ParamField>
+
+<ParamField path="getCommandManager()" type="static CommandManager">
+  Gets the command manager for registering commands.
+  
+  **Returns:** The CommandManager instance
+</ParamField>
+
+<ParamField path="getSchedulerManager()" type="static SchedulerManager">
+  Gets the scheduler manager for task scheduling.
+  
+  **Returns:** The SchedulerManager instance
+</ParamField>
+
+<ParamField path="getGlobalEventHandler()" type="static GlobalEventHandler">
+  Gets the global event handler for registering event listeners.
+  
+  **Returns:** The GlobalEventHandler instance
+  
+  ```java
+  GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+  eventHandler.addListener(PlayerLoginEvent.class, event -> {
+      event.setSpawningInstance(instanceManager.getInstances().iterator().next());
+  });
+  ```
+</ParamField>
+
+<ParamField path="getRecipeManager()" type="static RecipeManager">
+  Gets the recipe manager for handling recipes.
+  
+  **Returns:** The RecipeManager instance
+</ParamField>
+
+<ParamField path="getTeamManager()" type="static TeamManager">
+  Gets the team manager for managing scoreboard teams.
+  
+  **Returns:** The TeamManager instance
+</ParamField>
+
+<ParamField path="getBenchmarkManager()" type="static BenchmarkManager">
+  Gets the benchmark manager for server monitoring.
+  
+  **Returns:** The BenchmarkManager instance
+</ParamField>
+
+<ParamField path="getExceptionManager()" type="static ExceptionManager">
+  Gets the exception manager for handling server exceptions.
+  
+  **Returns:** The ExceptionManager instance
+</ParamField>
+
+<ParamField path="getBossBarManager()" type="static BossBarManager">
+  Gets the boss bar manager for managing boss bars.
+  
+  **Returns:** The BossBarManager instance
+</ParamField>
+
+### Server Properties
+
+<ParamField path="getBrandName()" type="static String">
+  Gets the current server brand name displayed to clients.
+  
+  **Returns:** The server brand name (default: "Minestom")
+</ParamField>
+
+<ParamField path="setBrandName(String)" type="static void">
+  Changes the server brand name and broadcasts it to all players.
+  
+  **Parameters:**
+  - `brandName` - The new server brand name
+  
+  ```java
+  MinecraftServer.setBrandName("My Custom Server");
+  ```
+</ParamField>
+
+<ParamField path="getDifficulty()" type="static Difficulty">
+  Gets the server difficulty level.
+  
+  **Returns:** The current Difficulty
+</ParamField>
+
+<ParamField path="setDifficulty(Difficulty)" type="static void">
+  Changes the server difficulty and notifies all clients.
+  
+  **Parameters:**
+  - `difficulty` - The new difficulty level
+  
+  ```java
+  MinecraftServer.setDifficulty(Difficulty.HARD);
+  ```
+</ParamField>
+
+<ParamField path="getCompressionThreshold()" type="static int">
+  Gets the compression threshold. A value of 0 means compression is disabled.
+  
+  **Returns:** The compression threshold in bytes
+</ParamField>
+
+<ParamField path="setCompressionThreshold(int)" type="static void">
+  Changes the compression threshold. Must be called before server start.
+  
+  **Parameters:**
+  - `compressionThreshold` - Threshold in bytes, 0 to disable
+  
+  **Throws:** IllegalStateException if called after server start
+  
+  ```java
+  MinecraftServer.setCompressionThreshold(256);
+  ```
+</ParamField>
+
+### Server State
+
+<ParamField path="isStarted()" type="static boolean">
+  Checks if the server is currently running.
+  
+  **Returns:** true if the server is started, false otherwise
+</ParamField>
+
+<ParamField path="isStopping()" type="static boolean">
+  Checks if the server is stopping or stopped.
+  
+  **Returns:** true if the server is not running, false otherwise
+</ParamField>
+
+<ParamField path="process()" type="static ServerProcess">
+  Gets the current server process.
+  
+  **Returns:** The ServerProcess instance
+</ParamField>
+
+---
+
+## ServerProcess Interface
+
+The ServerProcess interface provides access to all server subsystems and is the underlying implementation of MinecraftServer.
+
+### Core Managers
+
+<ResponseField name="connection()" type="ConnectionManager">
+  Handles incoming connections and player management.
+</ResponseField>
+
+<ResponseField name="instance()" type="InstanceManager">
+  Handles registered instances (worlds).
+</ResponseField>
+
+<ResponseField name="block()" type="BlockManager">
+  Handles block handlers and placement rules.
+</ResponseField>
+
+<ResponseField name="command()" type="CommandManager">
+  Handles registered commands.
+</ResponseField>
+
+<ResponseField name="recipe()" type="RecipeManager">
+  Handles registered recipes shown to clients.
+</ResponseField>
+
+<ResponseField name="team()" type="TeamManager">
+  Handles registered scoreboard teams.
+</ResponseField>
+
+<ResponseField name="eventHandler()" type="GlobalEventHandler">
+  Gets the global event handler for event registration.
+</ResponseField>
+
+<ResponseField name="scheduler()" type="SchedulerManager">
+  Main scheduler ticked at the server rate.
+</ResponseField>
+
+<ResponseField name="advancement()" type="AdvancementManager">
+  Handles registered advancements.
+</ResponseField>
+
+<ResponseField name="exception()" type="ExceptionManager">
+  Handles all thrown exceptions from the server.
+</ResponseField>
+
+<ResponseField name="dispatcher()" type="ThreadDispatcher<Chunk, Entity>">
+  Dispatcher for tickable game objects.
+</ResponseField>
+
+---
+
+## Example: Basic Server Setup
+
+<CodeGroup>
+```java Complete Setup
+public class ServerExample {
+    public static void main(String[] args) {
+        // Initialize server
+        MinecraftServer server = MinecraftServer.init();
+        
+        // Configure server
+        MinecraftServer.setBrandName("My Server");
+        MinecraftServer.setDifficulty(Difficulty.NORMAL);
+        
+        // Create instance
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
+        instanceContainer.setGenerator(unit -> unit.modifier().fillHeight(0, 40, Block.GRASS_BLOCK));
+        
+        // Register events
+        GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+        eventHandler.addListener(PlayerLoginEvent.class, event -> {
+            event.setSpawningInstance(instanceContainer);
+            event.getPlayer().setRespawnPoint(new Pos(0, 42, 0));
+        });
+        
+        eventHandler.addListener(PlayerChatEvent.class, event -> {
+            event.setChatFormat(chatEvent -> 
+                Component.text(chatEvent.getPlayer().getUsername() + ": ")
+                    .append(chatEvent.getMessage())
+            );
+        });
+        
+        // Start server
+        server.start("0.0.0.0", 25565);
+    }
+}
+```
+
+```java With Commands
+public class ServerWithCommands {
+    public static void main(String[] args) {
+        MinecraftServer server = MinecraftServer.init();
+        
+        // Register custom command
+        CommandManager commandManager = MinecraftServer.getCommandManager();
+        commandManager.register(new TeleportCommand());
+        
+        // Start server
+        server.start("0.0.0.0", 25565);
+    }
+}
+```
+</CodeGroup>
+
+<Note>
+  Always call `MinecraftServer.init()` before registering dimensions, biomes, commands, or events.
+</Note>
+
+<Warning>
+  The server must be initialized with `init()` and configured before calling `start()`. Configuration changes like `setCompressionThreshold()` cannot be made after the server has started.
+</Warning>

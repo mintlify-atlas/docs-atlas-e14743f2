@@ -1,0 +1,497 @@
+---
+title: Instances
+description: Understanding the Instance system - Minestom's approach to worlds
+---
+
+## What are Instances?
+
+In Minestom, an **Instance** is what Minecraft traditionally calls a "world". However, Minestom's instance system is more flexible and powerful:
+
+- **Multiple instances** can exist simultaneously
+- **Different dimension types** (Overworld, Nether, End, custom)
+- **Independent tick rates and time**
+- **Separate event handlers** per instance
+- **Shared or isolated chunks** between instances
+
+<Info>
+Instances are what players exist in, and they contain chunks, entities, and blocks. Every player must be in exactly one instance at any time.
+</Info>
+
+## Instance Types
+
+Minestom provides two types of instances:
+
+### InstanceContainer
+
+A full, independent world with its own chunk storage:
+
+```java PlayerInit.java:417-427
+InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
+instanceContainer.setGenerator(unit -> {
+    unit.modifier().fillHeight(0, 40, Block.STONE);
+});
+instanceContainer.setTimeRate(0);
+instanceContainer.setTime(12000);
+```
+
+**Use cases:**
+- Main game worlds
+- Separate game arenas
+- Custom dimensions
+- Any world that needs independent chunk storage
+
+### SharedInstance
+
+A lightweight instance that shares chunks with an InstanceContainer but can have different properties:
+
+```java
+InstanceContainer mainWorld = instanceManager.createInstanceContainer();
+SharedInstance lobby = instanceManager.createSharedInstance(mainWorld);
+lobby.setTimeRate(0); // Different time
+lobby.setTime(6000);  // Always noon
+```
+
+**Use cases:**
+- Lobbies that share the same terrain
+- Different game modes in the same world
+- Instances with different weather/time but same blocks
+
+<Warning>
+SharedInstances cannot modify chunks - they are read-only views of their parent InstanceContainer.
+</Warning>
+
+## Creating Instances
+
+### Basic Creation
+
+```java InstanceManager.java:72-74
+InstanceContainer instance = instanceManager.createInstanceContainer();
+```
+
+This creates an instance with:
+- Overworld dimension type
+- No chunk loader (chunks won't persist)
+- Auto chunk loading enabled
+
+### With Dimension Type
+
+```java
+InstanceContainer netherWorld = instanceManager.createInstanceContainer(
+    DimensionType.NETHER
+);
+
+InstanceContainer endWorld = instanceManager.createInstanceContainer(
+    DimensionType.THE_END
+);
+```
+
+### With Chunk Loader
+
+```java
+AnvilLoader chunkLoader = new AnvilLoader("./world_data");
+InstanceContainer persistentWorld = instanceManager.createInstanceContainer(
+    DimensionType.OVERWORLD,
+    chunkLoader
+);
+```
+
+<Tip>
+Chunk loaders handle saving/loading chunks to disk. Without one, chunks exist only in memory and are lost on server restart.
+</Tip>
+
+## Instance Registration
+
+<Note>
+Instances created via `createInstanceContainer()` are **automatically registered**. Only manually created instances need explicit registration.
+</Note>
+
+```java InstanceManager.java:40-44
+// Manual instance creation (advanced use case)
+Instance customInstance = new MyCustomInstance(...);
+instanceManager.registerInstance(customInstance);
+```
+
+## Chunk Management
+
+### Loading Chunks
+
+```java Instance.java:250-259
+// Force load a chunk
+CompletableFuture<Chunk> future = instance.loadChunk(chunkX, chunkZ);
+future.thenAccept(chunk -> {
+    System.out.println("Chunk loaded at " + chunkX + ", " + chunkZ);
+});
+
+// Load chunk at a position
+instance.loadChunk(new Pos(100, 64, 200)).thenAccept(chunk -> {
+    // Chunk is now loaded
+});
+```
+
+### Optional Loading
+
+Load a chunk only if auto-loading is enabled:
+
+```java Instance.java:269-280
+CompletableFuture<Chunk> optionalFuture = instance.loadOptionalChunk(chunkX, chunkZ);
+optionalFuture.thenAccept(chunk -> {
+    if (chunk != null) {
+        // Chunk was loaded
+    } else {
+        // Chunk was not loaded (auto-loading disabled)
+    }
+});
+```
+
+### Unloading Chunks
+
+```java Instance.java:289-301
+// Unload a specific chunk
+instance.unloadChunk(chunk);
+
+// Or by coordinates
+instance.unloadChunk(chunkX, chunkZ);
+```
+
+<Warning>
+When a chunk is unloaded, all entities except players are removed from it. Players are automatically moved to their spawn point.
+</Warning>
+
+### Auto Chunk Loading
+
+```java Instance.java:416-423
+// Enable auto chunk loading
+instance.enableAutoChunkLoad(true);
+
+// Check if enabled
+if (instance.hasEnabledAutoChunkLoad()) {
+    // Chunks will load automatically when needed
+}
+```
+
+With auto chunk loading:
+- Chunks load automatically when players move near them
+- `loadOptionalChunk()` will actually load chunks
+- Disabled by default for InstanceContainer
+
+## Chunk Generation
+
+### Setting a Generator
+
+```java PlayerInit.java:418-424
+instance.setGenerator(unit -> {
+    // Fill blocks 0-40 with stone
+    unit.modifier().fillHeight(0, 40, Block.STONE);
+    
+    // Place torch at y=40
+    if (unit.absoluteStart().blockY() < 40 && unit.absoluteEnd().blockY() > 40) {
+        unit.modifier().setBlock(
+            unit.absoluteStart().blockX(), 40, 
+            unit.absoluteStart().blockZ(), Block.TORCH
+        );
+    }
+});
+```
+
+### Removing a Generator
+
+```java Instance.java:388
+instance.setGenerator(null);
+```
+
+### Manual Generation
+
+```java Instance.java:400-401
+// Generate a specific chunk with a custom generator
+instance.generateChunk(chunkX, chunkZ, customGenerator).thenRun(() -> {
+    System.out.println("Chunk generated!");
+});
+```
+
+## Block Operations
+
+### Setting Blocks
+
+```java Instance.java:191-193
+instance.setBlock(x, y, z, Block.STONE);
+
+// With position
+instance.setBlock(new Vec(10, 64, 20), Block.DIAMOND_BLOCK);
+
+// Without block updates (faster, but neighboring blocks don't update)
+instance.setBlock(x, y, z, Block.GLASS, false);
+```
+
+### Getting Blocks
+
+```java
+Block block = instance.getBlock(x, y, z);
+if (block.compare(Block.STONE)) {
+    // It's stone
+}
+```
+
+### Batch Operations
+
+For better performance when setting many blocks:
+
+```java
+instance.loadChunk(chunkX, chunkZ).thenAccept(chunk -> {
+    synchronized (chunk) {
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                chunk.setBlock(x, 64, z, Block.GRASS_BLOCK);
+            }
+        }
+    }
+});
+```
+
+<Tip>
+Always synchronize on the chunk when performing batch operations to avoid race conditions.
+</Tip>
+
+## Biomes
+
+### Setting Biomes
+
+```java Instance.java:196-202
+instance.setBiome(x, y, z, RegistryKey.minecraft("plains"));
+```
+
+### Getting Biomes
+
+```java Instance.java:755-761
+RegistryKey<Biome> biome = instance.getBiome(x, y, z);
+```
+
+## Time and Weather
+
+### World Time
+
+```java Instance.java:521-524
+// Set time (0-24000)
+instance.setTime(6000);  // Noon
+instance.setTime(18000); // Midnight
+
+// Set time rate (ticks per server tick)
+instance.setTimeRate(1);  // Normal speed
+instance.setTimeRate(2);  // 2x speed
+instance.setTimeRate(0);  // Frozen time
+```
+
+### Weather
+
+```java Instance.java:885-889
+// Set weather instantly
+instance.setWeather(Weather.CLEAR);
+instance.setWeather(Weather.RAIN);
+instance.setWeather(Weather.THUNDER);
+
+// Set weather with transition
+instance.setWeather(Weather.RAIN, 100); // Transition over 100 ticks
+```
+
+## World Border
+
+```java Instance.java:612-614
+// Set world border
+WorldBorder border = WorldBorder.builder()
+    .centerX(0)
+    .centerZ(0)
+    .diameter(100)
+    .build();
+instance.setWorldBorder(border);
+
+// With transition time
+instance.setWorldBorder(border, 10.0); // Transition over 10 seconds
+```
+
+## Entities in Instances
+
+### Getting Entities
+
+```java Instance.java:648-650
+// All entities
+Set<Entity> entities = instance.getEntities();
+
+// Just players
+Set<Player> players = instance.getPlayers();
+
+// Entities in a chunk
+Set<Entity> chunkEntities = instance.getChunkEntities(chunk);
+
+// Nearby entities
+Collection<Entity> nearby = instance.getNearbyEntities(position, range);
+```
+
+### Finding Entities
+
+```java Instance.java:658-670
+// By entity ID
+Entity entity = instance.getEntityById(entityId);
+
+// By UUID
+Entity entity = instance.getEntityByUuid(uuid);
+Player player = instance.getPlayerByUuid(uuid);
+```
+
+## Saving and Loading
+
+### Saving Instance Data
+
+```java Instance.java:350
+// Save instance metadata (tags, properties)
+instance.saveInstance().thenRun(() -> {
+    System.out.println("Instance saved!");
+});
+```
+
+### Saving Chunks
+
+```java Instance.java:358-365
+// Save a specific chunk
+instance.saveChunkToStorage(chunk).thenRun(() -> {
+    System.out.println("Chunk saved!");
+});
+
+// Save all chunks
+instance.saveChunksToStorage().thenRun(() -> {
+    System.out.println("All chunks saved!");
+});
+```
+
+<Warning>
+Saving requires a ChunkLoader to be set on the instance. Without one, save operations will complete immediately without doing anything.
+</Warning>
+
+## Instance Events
+
+### Instance-Specific Events
+
+```java Instance.java:967-969
+// Get the instance's event node
+EventNode<InstanceEvent> eventNode = instance.eventNode();
+
+// Add instance-specific listeners
+eventNode.addListener(PlayerSpawnEvent.class, event -> {
+    event.getPlayer().sendMessage("Welcome to this instance!");
+});
+```
+
+### Instance Tick Event
+
+```java Instance.java:844
+eventNode.addListener(InstanceTickEvent.class, event -> {
+    // Called every tick for this instance
+    long tickTime = event.getTime();
+});
+```
+
+## Advanced Features
+
+### View Distance
+
+```java Instance.java:913-924
+// Set per-instance view distance
+instance.viewDistance(10);
+
+// Get current view distance
+int viewDistance = instance.viewDistance();
+```
+
+### Explosions
+
+```java Instance.java:1020-1040
+// Set explosion supplier
+instance.setExplosionSupplier((centerX, centerY, centerZ, strength, data) -> {
+    // Custom explosion logic
+    return new CustomExplosion(centerX, centerY, centerZ, strength);
+});
+
+// Trigger explosion
+instance.explode(x, y, z, 4.0f); // TNT-like explosion
+```
+
+### Lighting
+
+```java Instance.java:1072-1102
+// Get light levels
+int blockLight = instance.getBlockLight(x, y, z);
+int skyLight = instance.getSkyLight(x, y, z);
+
+// Use lighting chunks for automatic light updates
+instance.setChunkSupplier(LightingChunk::new);
+```
+
+## Unregistering Instances
+
+```java InstanceManager.java:116-133
+// Unregister and cleanup
+instanceManager.unregisterInstance(instance);
+```
+
+This will:
+- Verify no players are in the instance
+- Fire `InstanceUnregisterEvent`
+- Unload all chunks
+- Remove from the instance manager
+
+<Warning>
+You cannot unregister an instance with online players. Kick or move all players first.
+</Warning>
+
+## Complete Example
+
+Here's a complete example creating a game arena:
+
+```java
+public class Arena {
+    private final InstanceContainer instance;
+    
+    public Arena() {
+        InstanceManager manager = MinecraftServer.getInstanceManager();
+        
+        // Create instance with anvil storage
+        AnvilLoader loader = new AnvilLoader("./arenas/arena1");
+        instance = manager.createInstanceContainer(DimensionType.OVERWORLD, loader);
+        
+        // Configure instance
+        instance.setTimeRate(0);
+        instance.setTime(6000); // Always noon
+        instance.setWeather(Weather.CLEAR);
+        instance.viewDistance(6);
+        
+        // Set up generation
+        instance.setGenerator(unit -> {
+            unit.modifier().fillHeight(0, 1, Block.BEDROCK);
+            unit.modifier().fillHeight(1, 64, Block.STONE);
+            unit.modifier().fillHeight(64, 65, Block.GRASS_BLOCK);
+        });
+        
+        // Add event handlers
+        instance.eventNode().addListener(PlayerSpawnEvent.class, event -> {
+            event.getPlayer().setGameMode(GameMode.ADVENTURE);
+        });
+        
+        // Enable auto chunk loading
+        instance.enableAutoChunkLoad(true);
+    }
+    
+    public void addPlayer(Player player) {
+        player.setInstance(instance, new Pos(0, 65, 0));
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Threading" icon="layer-group" href="/core-concepts/threading">
+    Learn how instances are ticked across multiple threads
+  </Card>
+  <Card title="Events" icon="bolt" href="/core-concepts/events">
+    Master instance-specific event handling
+  </Card>
+</CardGroup>

@@ -1,80 +1,321 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Build your first Minestom server in minutes with this step-by-step guide
 ---
 
-## Get started in three steps
+This guide will walk you through creating a minimal but functional Minestom server. We'll set up the server, create a world instance, and handle player connections.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+- Java 21 or higher installed
+- A project with Minestom dependency configured (see [Installation](/installation))
+- Basic understanding of Java programming
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Creating Your First Server
 
-### Step 2: Deploy your changes
+Let's build a simple server that creates a flat world and spawns players in creative mode.
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Step title="Create the Main Class">
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Create a new Java class with a `main` method. This will be the entry point for your server.
 
-### Step 3: Go live
+```java Main.java
+package com.example.myserver;
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.Auth;
 
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+public class Main {
+    public static void main(String[] args) {
+        // Initialize the Minestom server
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+        
+        // Start the server on port 25565
+        minecraftServer.start("0.0.0.0", 25565);
+        
+        System.out.println("Server started successfully!");
+    }
+}
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  `Auth.Offline()` disables online mode authentication. For production servers, consider using `Auth.Online()` or integrating with a proxy like Velocity.
 </Note>
+
+</Step>
+
+<Step title="Create a World Instance">
+
+Minestom uses "instances" instead of traditional worlds. Instances are lightweight containers for blocks and entities that can be easily created, copied, and managed.
+
+Add the following code before starting the server:
+
+```java Main.java
+import net.minestom.server.instance.InstanceContainer;
+import net.minestom.server.instance.InstanceManager;
+import net.minestom.server.instance.block.Block;
+import net.minestom.server.instance.LightingChunk;
+
+public class Main {
+    public static void main(String[] args) {
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+        
+        // Get the instance manager
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        
+        // Create a new instance
+        InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
+        
+        // Set up a simple flat world generator
+        instanceContainer.setGenerator(unit -> {
+            unit.modifier().fillHeight(0, 40, Block.STONE);
+            
+            // Add a torch at y=40 for each chunk
+            if (unit.absoluteStart().blockY() < 40 && unit.absoluteEnd().blockY() > 40) {
+                unit.modifier().setBlock(
+                    unit.absoluteStart().blockX(), 40, unit.absoluteStart().blockZ(),
+                    Block.TORCH
+                );
+            }
+        });
+        
+        // Enable lighting (optional but recommended)
+        instanceContainer.setChunkSupplier(LightingChunk::new);
+        
+        // Set time to day and stop time progression
+        instanceContainer.setTimeRate(0);
+        instanceContainer.setTime(12000);
+        
+        minecraftServer.start("0.0.0.0", 25565);
+    }
+}
+```
+
+<Tip>
+  The generator function is called for each chunk section. Use `unit.modifier()` to place blocks efficiently in bulk.
+</Tip>
+
+</Step>
+
+<Step title="Handle Player Connections">
+
+Now we need to handle player login and spawning. We'll use Minestom's event system to listen for player configuration and spawn events.
+
+```java Main.java
+import net.minestom.server.coordinate.Pos;
+import net.minestom.server.entity.GameMode;
+import net.minestom.server.entity.Player;
+import net.minestom.server.event.GlobalEventHandler;
+import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
+import net.minestom.server.event.player.PlayerSpawnEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+
+public class Main {
+    public static void main(String[] args) {
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+        
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
+        
+        instanceContainer.setGenerator(unit -> {
+            unit.modifier().fillHeight(0, 40, Block.STONE);
+            if (unit.absoluteStart().blockY() < 40 && unit.absoluteEnd().blockY() > 40) {
+                unit.modifier().setBlock(
+                    unit.absoluteStart().blockX(), 40, unit.absoluteStart().blockZ(),
+                    Block.TORCH
+                );
+            }
+        });
+        instanceContainer.setChunkSupplier(LightingChunk::new);
+        instanceContainer.setTimeRate(0);
+        instanceContainer.setTime(12000);
+        
+        // Get the global event handler
+        GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+        
+        // Set the spawning instance for new players
+        eventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+            final Player player = event.getPlayer();
+            event.setSpawningInstance(instanceContainer);
+            player.setRespawnPoint(new Pos(0, 42, 0));
+        });
+        
+        // Configure player on spawn
+        eventHandler.addListener(PlayerSpawnEvent.class, event -> {
+            final Player player = event.getPlayer();
+            player.setGameMode(GameMode.CREATIVE);
+            
+            // Send welcome message
+            player.sendMessage(
+                Component.text("Welcome to my Minestom server!", NamedTextColor.GOLD)
+            );
+        });
+        
+        minecraftServer.start("0.0.0.0", 25565);
+        System.out.println("Server started on port 25565");
+    }
+}
+```
+
+</Step>
+
+<Step title="Run Your Server">
+
+Compile and run your application. You should see output indicating the server has started:
+
+```bash Terminal
+./gradlew run
+```
+
+Connect to your server using the Minecraft client at `localhost:25565`.
+
+<Note>
+  Make sure you're using a Minecraft client version that matches your Minestom version (1.21.x based on the data version 1.21.11-rv2).
+</Note>
+
+</Step>
+
+</Steps>
+
+## Complete Example
+
+Here's the complete working example based on the Minestom demo:
+
+```java Main.java
+package com.example.myserver;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.minestom.server.Auth;
+import net.minestom.server.MinecraftServer;
+import net.minestom.server.coordinate.Pos;
+import net.minestom.server.entity.GameMode;
+import net.minestom.server.entity.Player;
+import net.minestom.server.event.GlobalEventHandler;
+import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
+import net.minestom.server.event.player.PlayerSpawnEvent;
+import net.minestom.server.instance.InstanceContainer;
+import net.minestom.server.instance.InstanceManager;
+import net.minestom.server.instance.LightingChunk;
+import net.minestom.server.instance.block.Block;
+
+public class Main {
+
+    public static void main(String[] args) {
+        // Initialize the server with offline mode
+        MinecraftServer minecraftServer = MinecraftServer.init(new Auth.Offline());
+        
+        // Create an instance (world)
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        InstanceContainer instanceContainer = instanceManager.createInstanceContainer();
+        
+        // Set up world generator - creates a flat stone world
+        instanceContainer.setGenerator(unit -> {
+            unit.modifier().fillHeight(0, 40, Block.STONE);
+            
+            // Place a torch on top of each chunk
+            if (unit.absoluteStart().blockY() < 40 && unit.absoluteEnd().blockY() > 40) {
+                unit.modifier().setBlock(
+                    unit.absoluteStart().blockX(), 40, unit.absoluteStart().blockZ(),
+                    Block.TORCH
+                );
+            }
+        });
+        
+        // Enable lighting support
+        instanceContainer.setChunkSupplier(LightingChunk::new);
+        
+        // Set to daytime and stop time progression
+        instanceContainer.setTimeRate(0);
+        instanceContainer.setTime(12000);
+        
+        // Register event listeners
+        GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+        
+        // Handle player configuration (pre-spawn)
+        eventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+            final Player player = event.getPlayer();
+            event.setSpawningInstance(instanceContainer);
+            player.setRespawnPoint(new Pos(0, 42, 0));
+        });
+        
+        // Handle player spawn
+        eventHandler.addListener(PlayerSpawnEvent.class, event -> {
+            final Player player = event.getPlayer();
+            
+            // Set game mode to creative
+            player.setGameMode(GameMode.CREATIVE);
+            
+            // Send welcome message on first spawn
+            if (event.isFirstSpawn()) {
+                player.sendMessage(
+                    Component.text("Welcome to my Minestom server!", NamedTextColor.GOLD)
+                );
+            }
+        });
+        
+        // Start the server on default port
+        minecraftServer.start("0.0.0.0", 25565);
+        System.out.println("Server started successfully on port 25565!");
+    }
+}
+```
+
+## What's Next?
+
+Congratulations! You've created your first Minestom server. Here are some next steps:
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/core-concepts/architecture">
+    Understand instances, blocks, entities, and the event system
+  </Card>
+  <Card title="Commands" icon="terminal" href="/guides/commands">
+    Add custom commands using Brigadier
+  </Card>
+  <Card title="Block Handlers" icon="cube" href="/guides/blocks">
+    Implement custom block interactions like chests and doors
+  </Card>
+  <Card title="Event System" icon="bolt" href="/core-concepts/events">
+    Learn how to listen and respond to server events
+  </Card>
+</CardGroup>
+
+## Additional Configuration
+
+### Enable Compression
+
+Reduce bandwidth usage by enabling packet compression:
+
+```java
+MinecraftServer.setCompressionThreshold(256);
+```
+
+### Register Commands
+
+Add custom commands to your server:
+
+```java
+import net.minestom.server.command.CommandManager;
+import net.minestom.server.command.builder.Command;
+
+CommandManager commandManager = MinecraftServer.getCommandManager();
+commandManager.register(new MyCustomCommand());
+```
+
+### Enable Benchmarking
+
+Monitor server performance:
+
+```java
+import net.minestom.server.utils.time.TimeUnit;
+import java.time.Duration;
+
+MinecraftServer.getBenchmarkManager().enable(Duration.of(10, TimeUnit.SECOND));
+```
+
+<Tip>
+  Check out the [demo directory](https://github.com/Minestom/Minestom/tree/master/demo) in the Minestom repository for more advanced examples including block handlers, custom entities, inventories, and more.
+</Tip>

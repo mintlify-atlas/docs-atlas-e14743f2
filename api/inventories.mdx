@@ -1,0 +1,485 @@
+---
+title: Inventories API
+description: Inventory management, item manipulation, and click handling
+---
+
+## Overview
+
+Minestom provides a comprehensive inventory system for managing items in containers, player inventories, and custom GUIs.
+
+## Inventory
+
+Represents an inventory that can be viewed by multiple players.
+
+### Creating Inventories
+
+<CodeGroup>
+```java Chest Inventory
+Inventory chest = new Inventory(InventoryType.CHEST_3_ROW, "My Chest");
+
+// Set items
+chest.setItemStack(0, ItemStack.of(Material.DIAMOND));
+chest.setItemStack(1, ItemStack.of(Material.EMERALD, 64));
+
+// Open for player
+player.openInventory(chest);
+```
+
+```java Custom GUI
+Inventory gui = new Inventory(InventoryType.CHEST_6_ROW, Component.text("Shop"));
+
+// Add items
+for (int i = 0; i < gui.getSize(); i++) {
+    gui.setItemStack(i, ItemStack.of(Material.GRAY_STAINED_GLASS_PANE));
+}
+
+// Add clickable items
+gui.setItemStack(13, ItemStack.builder(Material.DIAMOND_SWORD)
+    .displayName(Component.text("Buy Sword - 100 coins"))
+    .build());
+```
+</CodeGroup>
+
+### Constructor
+
+<ResponseField name="Inventory" type="Inventory">
+  Creates a new inventory
+  
+  <Expandable title="parameters">
+    <ParamField path="inventoryType" type="InventoryType">
+      The type of inventory (determines size and appearance)
+    </ParamField>
+    <ParamField path="title" type="Component | String">
+      The inventory title displayed to players
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Item Management
+
+<ResponseField name="setItemStack" type="void">
+  Sets an ItemStack at the specified slot
+  
+  <Expandable title="parameters">
+    <ParamField path="slot" type="int">
+      The slot index (0-based)
+    </ParamField>
+    <ParamField path="itemStack" type="ItemStack">
+      The item to set
+    </ParamField>
+  </Expandable>
+  
+  Automatically sends updates to all viewers
+</ResponseField>
+
+<ResponseField name="getItemStack" type="ItemStack">
+  Gets the ItemStack at the specified slot
+  
+  <Expandable title="parameters">
+    <ParamField path="slot" type="int">
+      The slot index
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="addItemStack" type="boolean">
+  Adds an ItemStack to the inventory
+  
+  <Expandable title="parameters">
+    <ParamField path="itemStack" type="ItemStack">
+      The item to add
+    </ParamField>
+  </Expandable>
+  
+  Returns `true` if the item was successfully added
+</ResponseField>
+
+<ResponseField name="takeItemStack" type="boolean">
+  Takes an ItemStack from the inventory
+  
+  <Expandable title="parameters">
+    <ParamField path="itemStack" type="ItemStack">
+      The item to take
+    </ParamField>
+    <ParamField path="option" type="TransactionOption<T>">
+      The transaction option
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="replaceItemStack" type="void">
+  Replaces an ItemStack using an operator
+  
+  <Expandable title="parameters">
+    <ParamField path="slot" type="int">
+      The slot to replace
+    </ParamField>
+    <ParamField path="operator" type="UnaryOperator<ItemStack>">
+      Function to transform the item
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="clear" type="void">
+  Clears all items from the inventory and updates viewers
+</ResponseField>
+
+<ResponseField name="getItemStacks" type="ItemStack[]">
+  Gets a copy of all items in the inventory
+</ResponseField>
+
+<ResponseField name="copyContents" type="void">
+  Copies items from an array into this inventory
+  
+  <Expandable title="parameters">
+    <ParamField path="itemStacks" type="ItemStack[]">
+      Array of items (must match inventory size)
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Viewers
+
+<ResponseField name="addViewer" type="boolean">
+  Adds a viewer (does NOT open the inventory)
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to add as viewer
+    </ParamField>
+  </Expandable>
+  
+  Use `player.openInventory(inventory)` to actually open it
+</ResponseField>
+
+<ResponseField name="removeViewer" type="boolean">
+  Removes a viewer (does NOT close the inventory)
+  
+  <Expandable title="parameters">
+    <ParamField path="player" type="Player">
+      The player to remove
+    </ParamField>
+  </Expandable>
+  
+  Use `player.closeInventory()` to close it
+</ResponseField>
+
+<ResponseField name="getViewers" type="Set<Player>">
+  Gets all players currently viewing this inventory
+</ResponseField>
+
+<ResponseField name="update" type="void">
+  Refreshes the inventory for all viewers
+</ResponseField>
+
+### Properties
+
+<ResponseField name="getInventoryType" type="InventoryType">
+  Gets the inventory type
+</ResponseField>
+
+<ResponseField name="getTitle" type="Component">
+  Gets the inventory title
+</ResponseField>
+
+<ResponseField name="setTitle" type="void">
+  Changes the inventory title
+  
+  <Expandable title="parameters">
+    <ParamField path="title" type="Component">
+      The new title
+    </ParamField>
+  </Expandable>
+  
+  Re-opens the inventory for all viewers
+</ResponseField>
+
+<ResponseField name="getSize" type="int">
+  Gets the total size of the inventory (number of slots)
+</ResponseField>
+
+<ResponseField name="getWindowId" type="byte">
+  Gets the window ID used by the client to identify this inventory
+</ResponseField>
+
+### Click Handling
+
+<ResponseField name="setClickProcessor" type="void">
+  Sets a custom click processor for handling inventory clicks
+  
+  <Expandable title="parameters">
+    <ParamField path="clickProcessor" type="InventoryClickProcessor">
+      The click processor
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="addInventoryCondition" type="void">
+  Adds a click condition/handler
+  
+  <Expandable title="parameters">
+    <ParamField path="condition" type="InventoryCondition">
+      The condition to add
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+## PlayerInventory
+
+Represents a player's inventory (extends AbstractInventory).
+
+### Accessing Player Inventory
+
+<CodeGroup>
+```java Get Player Inventory
+Player player = /* get player */;
+PlayerInventory inventory = player.getInventory();
+
+// Main hand
+ItemStack mainHand = inventory.getItemInMainHand();
+inventory.setItemInMainHand(ItemStack.of(Material.DIAMOND_SWORD));
+
+// Armor
+itemStack helmet = inventory.getHelmet();
+inventory.setHelmet(ItemStack.of(Material.DIAMOND_HELMET));
+```
+</CodeGroup>
+
+### Equipment Methods
+
+<ResponseField name="getEquipment" type="ItemStack">
+  Gets equipment in a specific slot
+  
+  <Expandable title="parameters">
+    <ParamField path="slot" type="EquipmentSlot">
+      The equipment slot (MAIN_HAND, OFF_HAND, HELMET, etc.)
+    </ParamField>
+    <ParamField path="heldSlot" type="byte">
+      The player's current held slot
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setEquipment" type="void">
+  Sets equipment in a specific slot
+  
+  <Expandable title="parameters">
+    <ParamField path="slot" type="EquipmentSlot">
+      The equipment slot
+    </ParamField>
+    <ParamField path="heldSlot" type="byte">
+      The player's held slot
+    </ParamField>
+    <ParamField path="itemStack" type="ItemStack">
+      The item to set
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Cursor Item
+
+<ResponseField name="getCursorItem" type="ItemStack">
+  Gets the item in the player's cursor (what they're dragging)
+</ResponseField>
+
+<ResponseField name="setCursorItem" type="void">
+  Sets the cursor item
+  
+  <Expandable title="parameters">
+    <ParamField path="cursorItem" type="ItemStack">
+      The item to set
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+### Constants
+
+<ParamField path="PlayerInventory.INVENTORY_SIZE" type="int">
+  Total inventory size (46 slots)
+</ParamField>
+
+<ParamField path="PlayerInventory.INNER_INVENTORY_SIZE" type="int">
+  Main inventory size excluding armor/offhand (36 slots)
+</ParamField>
+
+## InventoryType
+
+Enum representing different inventory types.
+
+### Available Types
+
+<ParamField path="CHEST_1_ROW" type="InventoryType">
+  9-slot chest (1 row)
+</ParamField>
+
+<ParamField path="CHEST_2_ROW" type="InventoryType">
+  18-slot chest (2 rows)
+</ParamField>
+
+<ParamField path="CHEST_3_ROW" type="InventoryType">
+  27-slot chest (3 rows)
+</ParamField>
+
+<ParamField path="CHEST_4_ROW" type="InventoryType">
+  36-slot chest (4 rows)
+</ParamField>
+
+<ParamField path="CHEST_5_ROW" type="InventoryType">
+  45-slot chest (5 rows)
+</ParamField>
+
+<ParamField path="CHEST_6_ROW" type="InventoryType">
+  54-slot chest (6 rows)
+</ParamField>
+
+<ParamField path="HOPPER" type="InventoryType">
+  5-slot hopper
+</ParamField>
+
+<ParamField path="FURNACE" type="InventoryType">
+  3-slot furnace
+</ParamField>
+
+<ParamField path="CRAFTING" type="InventoryType">
+  10-slot crafting table
+</ParamField>
+
+<ParamField path="ANVIL" type="InventoryType">
+  3-slot anvil
+</ParamField>
+
+<ParamField path="ENCHANTMENT" type="InventoryType">
+  2-slot enchanting table
+</ParamField>
+
+<ParamField path="BREWING_STAND" type="InventoryType">
+  5-slot brewing stand
+</ParamField>
+
+<ParamField path="BEACON" type="InventoryType">
+  1-slot beacon
+</ParamField>
+
+<ParamField path="SHULKER_BOX" type="InventoryType">
+  27-slot shulker box
+</ParamField>
+
+And more: `BLAST_FURNACE`, `SMOKER`, `LOOM`, `GRINDSTONE`, `SMITHING`, `CARTOGRAPHY`, `STONE_CUTTER`, etc.
+
+### Methods
+
+<ResponseField name="getSize" type="int">
+  Gets the number of slots in this inventory type
+</ResponseField>
+
+<ResponseField name="getWindowType" type="int">
+  Gets the protocol window type ID
+</ResponseField>
+
+## Usage Examples
+
+### Custom GUI Menu
+
+<CodeGroup>
+```java GUI Menu
+Inventory menu = new Inventory(InventoryType.CHEST_3_ROW, "Choose an option");
+
+// Set border
+ItemStack border = ItemStack.of(Material.BLACK_STAINED_GLASS_PANE);
+for (int i : new int[]{0,1,2,3,5,6,7,8,9,17,18,19,20,21,23,24,25,26}) {
+    menu.setItemStack(i, border);
+}
+
+// Add options
+menu.setItemStack(11, ItemStack.builder(Material.DIAMOND_SWORD)
+    .displayName(Component.text("PvP Arena"))
+    .build());
+    
+menu.setItemStack(13, ItemStack.builder(Material.GRASS_BLOCK)
+    .displayName(Component.text("Build World"))
+    .build());
+    
+menu.setItemStack(15, ItemStack.builder(Material.ENDER_PEARL)
+    .displayName(Component.text("Hub"))
+    .build());
+
+// Handle clicks
+menu.addInventoryCondition((player, slot, clickType, result) -> {
+    result.setCancel(true); // Prevent taking items
+    
+    switch (slot) {
+        case 11 -> player.sendMessage("Teleporting to PvP...");
+        case 13 -> player.sendMessage("Teleporting to Build...");
+        case 15 -> player.sendMessage("Teleporting to Hub...");
+    }
+    
+    player.closeInventory();
+});
+
+player.openInventory(menu);
+```
+</CodeGroup>
+
+### Paginated Inventory
+
+<CodeGroup>
+```java Pagination
+public class PagedInventory {
+    private final List<ItemStack> items;
+    private int currentPage = 0;
+    
+    public Inventory createPage(int page) {
+        Inventory inv = new Inventory(InventoryType.CHEST_6_ROW, "Page " + (page + 1));
+        
+        int startIdx = page * 45;
+        int endIdx = Math.min(startIdx + 45, items.size());
+        
+        for (int i = startIdx; i < endIdx; i++) {
+            inv.setItemStack(i - startIdx, items.get(i));
+        }
+        
+        // Navigation
+        if (page > 0) {
+            inv.setItemStack(45, ItemStack.of(Material.ARROW)
+                .withDisplayName(Component.text("Previous")));
+        }
+        if (endIdx < items.size()) {
+            inv.setItemStack(53, ItemStack.of(Material.ARROW)
+                .withDisplayName(Component.text("Next")));
+        }
+        
+        return inv;
+    }
+}
+```
+</CodeGroup>
+
+### Event Listening
+
+<CodeGroup>
+```java Inventory Events
+Inventory shop = new Inventory(InventoryType.CHEST_3_ROW, "Shop");
+
+// Listen to the inventory's event node
+shop.eventNode().addListener(InventoryPreClickEvent.class, event -> {
+    event.setCancelled(true); // Cancel all clicks
+    
+    Player player = event.getPlayer();
+    int slot = event.getSlot();
+    
+    // Handle purchase logic
+});
+
+// Or use global event handler
+MinecraftServer.getGlobalEventHandler()
+    .addListener(InventoryPreClickEvent.class, event -> {
+        if (event.getInventory() == shop) {
+            // Handle shop clicks
+        }
+    });
+```
+</CodeGroup>
+
+<Note>
+  Use `player.openInventory(inventory)` to open and `player.closeInventory()` to close inventories. Direct viewer management with `addViewer`/`removeViewer` does not send open/close packets.
+</Note>

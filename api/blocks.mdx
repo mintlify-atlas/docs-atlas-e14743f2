@@ -1,0 +1,680 @@
+---
+title: 'Blocks'
+description: 'Block class, BlockManager, and BlockHandler API for block manipulation'
+icon: 'cube'
+---
+
+## Overview
+
+Blocks are the building blocks of the Minecraft world. Minestom provides a powerful API for manipulating blocks, registering custom handlers, and controlling placement rules.
+
+---
+
+## Block Class
+
+Immutable representation of a block with properties, NBT data, and optional handler.
+
+### Getting Blocks
+
+<ParamField path="fromKey(String)" type="static Block">
+  Gets a block by its namespaced key.
+  
+  **Parameters:**
+  - `key` - The block key (e.g., "minecraft:stone")
+  
+  **Returns:** The Block, or null if not found
+  
+  ```java
+  Block stone = Block.fromKey("minecraft:stone");
+  Block oakPlanks = Block.fromKey("minecraft:oak_planks");
+  ```
+</ParamField>
+
+<ParamField path="fromState(String)" type="static Block">
+  Parses a block from a state string.
+  
+  **Parameters:**
+  - `state` - Block state string (e.g., "minecraft:oak_stairs[facing=north,half=top]")
+  
+  **Returns:** The Block with properties, or null if invalid
+  
+  ```java
+  Block stairs = Block.fromState("minecraft:oak_stairs[facing=north,half=top]");
+  ```
+</ParamField>
+
+<ParamField path="fromStateId(int)" type="static Block">
+  Gets a block from its state ID.
+  
+  **Parameters:**
+  - `stateId` - The block state ID
+  
+  **Returns:** The Block, or null if invalid
+</ParamField>
+
+<ParamField path="fromBlockId(int)" type="static Block">
+  Gets a block from its base ID.
+  
+  **Parameters:**
+  - `blockId` - The block ID
+  
+  **Returns:** The default block state, or null
+</ParamField>
+
+<ParamField path="values()" type="static Collection<Block>">
+  Gets all registered blocks.
+  
+  **Returns:** Collection of all blocks
+  
+  ```java
+  for (Block block : Block.values()) {
+      System.out.println(block.key());
+  }
+  ```
+</ParamField>
+
+### Block Properties
+
+<ParamField path="withProperty(String, String)" type="Block">
+  Creates a new block with a property changed.
+  
+  **Parameters:**
+  - `property` - Property name
+  - `value` - Property value
+  
+  **Returns:** New Block with the property set
+  
+  **Throws:** IllegalArgumentException if property or value is invalid
+  
+  ```java
+  Block stairs = Block.OAK_STAIRS
+      .withProperty("facing", "north")
+      .withProperty("half", "top");
+  ```
+</ParamField>
+
+<ParamField path="withProperties(Map<String, String>)" type="Block">
+  Changes multiple properties at once.
+  
+  **Parameters:**
+  - `properties` - Map of property names to values
+  
+  **Returns:** New Block with properties changed
+  
+  ```java
+  Map<String, String> props = Map.of(
+      "facing", "north",
+      "half", "top"
+  );
+  Block stairs = Block.OAK_STAIRS.withProperties(props);
+  ```
+</ParamField>
+
+<ParamField path="getProperty(String)" type="String">
+  Gets a property value.
+  
+  **Parameters:**
+  - `property` - Property name
+  
+  **Returns:** Property value, or null if not present
+  
+  ```java
+  Block door = Block.OAK_DOOR.withProperty("open", "true");
+  String isOpen = door.getProperty("open"); // "true"
+  ```
+</ParamField>
+
+<ParamField path="properties()" type="Map<String, String>">
+  Gets all properties.
+  
+  **Returns:** Unmodifiable map of properties
+  
+  ```java
+  Map<String, String> props = block.properties();
+  ```
+</ParamField>
+
+<ParamField path="possibleStates()" type="Collection<Block>">
+  Gets all possible states for this block type.
+  
+  **Returns:** Collection of block states
+</ParamField>
+
+<ParamField path="defaultState()" type="Block">
+  Gets the default state with no properties or handlers.
+  
+  **Returns:** The default Block
+</ParamField>
+
+### NBT Data
+
+<ParamField path="withNbt(CompoundBinaryTag)" type="Block">
+  Creates a new block with NBT data.
+  
+  **Parameters:**
+  - `compound` - The NBT compound (null to remove)
+  
+  **Returns:** New Block with NBT
+  
+  ```java
+  CompoundBinaryTag nbt = CompoundBinaryTag.builder()
+      .putString("CustomName", "My Chest")
+      .build();
+  Block chest = Block.CHEST.withNbt(nbt);
+  ```
+</ParamField>
+
+<ParamField path="withTag(Tag<T>, T)" type="Block">
+  Creates a block with a tag modified.
+  
+  **Parameters:**
+  - `tag` - The tag to modify
+  - `value` - The tag value (null to remove)
+  
+  **Returns:** New Block with tag changed
+</ParamField>
+
+<ParamField path="nbt()" type="CompoundBinaryTag">
+  Gets the block NBT data.
+  
+  **Returns:** The NBT compound, or null if none
+</ParamField>
+
+<ParamField path="hasNbt()" type="boolean">
+  Checks if the block has NBT data.
+  
+  **Returns:** true if NBT is present
+</ParamField>
+
+### Block Handlers
+
+<ParamField path="withHandler(BlockHandler)" type="Block">
+  Creates a block with a handler attached.
+  
+  **Parameters:**
+  - `handler` - The block handler (null to remove)
+  
+  **Returns:** New Block with handler
+  
+  ```java
+  Block customBlock = Block.STONE.withHandler(new MyBlockHandler());
+  instance.setBlock(pos, customBlock);
+  ```
+</ParamField>
+
+<ParamField path="handler()" type="BlockHandler">
+  Gets the block handler.
+  
+  **Returns:** The BlockHandler, or null if not present
+</ParamField>
+
+### Block Information
+
+<ParamField path="key()" type="Key">
+  Gets the block namespaced key.
+  
+  **Returns:** The Key (e.g., "minecraft:stone")
+</ParamField>
+
+<ParamField path="id()" type="int">
+  Gets the block ID.
+  
+  **Returns:** The block ID
+</ParamField>
+
+<ParamField path="stateId()" type="int">
+  Gets the state ID (unique for each property combination).
+  
+  **Returns:** The state ID
+</ParamField>
+
+<ParamField path="state()" type="String">
+  Gets the block state as a string.
+  
+  **Returns:** State string (e.g., "minecraft:oak_stairs[facing=north]")
+  
+  ```java
+  String state = block.state();
+  Block restored = Block.fromState(state);
+  ```
+</ParamField>
+
+<ParamField path="isAir()" type="boolean">
+  Checks if the block is air.
+  
+  **Returns:** true if air
+</ParamField>
+
+<ParamField path="isSolid()" type="boolean">
+  Checks if the block is solid.
+  
+  **Returns:** true if solid
+</ParamField>
+
+<ParamField path="isLiquid()" type="boolean">
+  Checks if the block is a liquid.
+  
+  **Returns:** true if liquid
+</ParamField>
+
+<ParamField path="compare(Block, Comparator)" type="boolean">
+  Compares two blocks.
+  
+  **Parameters:**
+  - `block` - Block to compare to
+  - `comparator` - Comparison mode (IDENTITY, ID, STATE)
+  
+  **Returns:** true if blocks match according to comparator
+  
+  ```java
+  // Compare by ID (ignores properties)
+  if (block.compare(Block.STONE, Block.Comparator.ID)) {
+      // Same block type
+  }
+  
+  // Compare by state (exact match including properties)
+  if (block.compare(otherBlock, Block.Comparator.STATE)) {
+      // Exact same block
+  }
+  ```
+</ParamField>
+
+<ParamField path="registry()" type="RegistryData.BlockEntry">
+  Gets the block registry data.
+  
+  **Returns:** The registry entry with collision shape, etc.
+</ParamField>
+
+---
+
+## BlockManager
+
+Manages block handlers and placement rules.
+
+### Handler Registration
+
+<ParamField path="registerHandler(String, Supplier<BlockHandler>)" type="void">
+  Registers a block handler by namespace.
+  
+  **Parameters:**
+  - `namespace` - The block namespace (e.g., "custom:my_block")
+  - `handlerSupplier` - Supplier that creates handler instances
+  
+  ```java
+  BlockManager blockManager = MinecraftServer.getBlockManager();
+  blockManager.registerHandler("custom:teleporter", () -> new TeleporterHandler());
+  ```
+</ParamField>
+
+<ParamField path="registerHandler(Key, Supplier<BlockHandler>)" type="void">
+  Registers a handler using a Key.
+  
+  **Parameters:**
+  - `key` - The block key
+  - `handlerSupplier` - Handler supplier
+</ParamField>
+
+<ParamField path="getHandler(String)" type="BlockHandler">
+  Gets a handler by namespace.
+  
+  **Parameters:**
+  - `namespace` - The block namespace
+  
+  **Returns:** The BlockHandler, or null if not registered
+</ParamField>
+
+### Placement Rules
+
+<ParamField path="registerBlockPlacementRule(BlockPlacementRule)" type="void">
+  Registers a placement rule for a block.
+  
+  **Parameters:**
+  - `blockPlacementRule` - The placement rule
+  
+  **Throws:** IllegalArgumentException if block ID is negative
+  
+  ```java
+  BlockPlacementRule rule = new BlockPlacementRule(Block.TORCH);
+  rule.setPlacementCondition((instance, block, pos) -> {
+      // Can only place on solid blocks
+      Block below = instance.getBlock(pos.sub(0, 1, 0));
+      return below.isSolid();
+  });
+  blockManager.registerBlockPlacementRule(rule);
+  ```
+</ParamField>
+
+<ParamField path="getBlockPlacementRule(Block)" type="BlockPlacementRule">
+  Gets the placement rule for a block.
+  
+  **Parameters:**
+  - `block` - The block
+  
+  **Returns:** The placement rule, or null if not registered
+</ParamField>
+
+---
+
+## BlockHandler Interface
+
+Defines custom behavior for blocks. All methods are optional.
+
+### Lifecycle Events
+
+<ParamField path="onPlace(Placement)" type="void">
+  Called when the block is placed.
+  
+  **Parameters:**
+  - `placement` - Details about the placement
+  
+  ```java
+  @Override
+  public void onPlace(Placement placement) {
+      System.out.println("Block placed at: " + placement.getBlockPosition());
+  }
+  ```
+</ParamField>
+
+<ParamField path="onDestroy(Destroy)" type="void">
+  Called when the block is destroyed or replaced.
+  
+  **Parameters:**
+  - `destroy` - Details about the destruction
+  
+  ```java
+  @Override
+  public void onDestroy(Destroy destroy) {
+      // Drop custom items, save data, etc.
+  }
+  ```
+</ParamField>
+
+### Interaction
+
+<ParamField path="onInteract(Interaction)" type="boolean">
+  Handles player interaction with the block.
+  
+  **Parameters:**
+  - `interaction` - Interaction details
+  
+  **Returns:** true to allow interaction, false to cancel
+  
+  ```java
+  @Override
+  public boolean onInteract(Interaction interaction) {
+      Player player = interaction.getPlayer();
+      player.sendMessage(Component.text("You clicked the block!"));
+      return true;
+  }
+  ```
+</ParamField>
+
+<ParamField path="onTouch(Touch)" type="void">
+  Called when an entity touches the block.
+  
+  **Parameters:**
+  - `touch` - Touch details
+  
+  ```java
+  @Override
+  public void onTouch(Touch touch) {
+      Entity entity = touch.getEntity();
+      if (entity instanceof Player player) {
+          player.setVelocity(new Vec(0, 10, 0)); // Launch player
+      }
+  }
+  ```
+</ParamField>
+
+### Ticking
+
+<ParamField path="tick(Tick)" type="void">
+  Called every tick if isTickable() returns true.
+  
+  **Parameters:**
+  - `tick` - Tick details
+  
+  ```java
+  @Override
+  public void tick(Tick tick) {
+      // Update block state, particles, etc.
+  }
+  ```
+</ParamField>
+
+<ParamField path="isTickable()" type="boolean">
+  Determines if this handler should receive tick updates.
+  
+  **Returns:** true to receive ticks
+  
+  ```java
+  @Override
+  public boolean isTickable() {
+      return true; // This block needs ticking
+  }
+  ```
+</ParamField>
+
+### Block Entity
+
+<ParamField path="getKey()" type="Key">
+  Gets the handler key (required for block entities).
+  
+  **Returns:** The handler namespace key
+  
+  ```java
+  @Override
+  public Key getKey() {
+      return Key.key("custom:my_block");
+  }
+  ```
+</ParamField>
+
+<ParamField path="getBlockEntityTags()" type="Collection<Tag<?>>">
+  Specifies which tags should be sent to clients.
+  
+  **Returns:** Collection of tags to sync
+</ParamField>
+
+---
+
+## Block.Getter Interface
+
+Interface for retrieving blocks (implemented by Instance).
+
+<ParamField path="getBlock(int, int, int)" type="Block">
+  Gets a block at coordinates.
+  
+  **Parameters:**
+  - `x`, `y`, `z` - Block coordinates
+  
+  **Returns:** The Block
+</ParamField>
+
+<ParamField path="getBlock(Point)" type="Block">
+  Gets a block at a point.
+  
+  **Parameters:**
+  - `point` - The position
+  
+  **Returns:** The Block
+</ParamField>
+
+<ParamField path="getBlock(int, int, int, Condition)" type="Block">
+  Gets a block with a retrieval hint.
+  
+  **Parameters:**
+  - `x`, `y`, `z` - Coordinates
+  - `condition` - Retrieval condition (NONE, CACHED, TYPE)
+  
+  **Returns:** The Block (may be null for CACHED)
+  
+  ```java
+  // Only get if cached (fast, may return null)
+  Block cached = instance.getBlock(x, y, z, Block.Getter.Condition.CACHED);
+  
+  // Only care about block type (may not have correct NBT/handler)
+  Block type = instance.getBlock(x, y, z, Block.Getter.Condition.TYPE);
+  ```
+</ParamField>
+
+---
+
+## Block.Setter Interface
+
+Interface for placing blocks (implemented by Instance, Batch).
+
+<ParamField path="setBlock(int, int, int, Block)" type="void">
+  Sets a block at coordinates.
+  
+  **Parameters:**
+  - `x`, `y`, `z` - Block coordinates
+  - `block` - The block to place
+</ParamField>
+
+<ParamField path="setBlock(Point, Block)" type="void">
+  Sets a block at a point.
+  
+  **Parameters:**
+  - `blockPosition` - The position
+  - `block` - The block to place
+</ParamField>
+
+---
+
+## Examples
+
+<CodeGroup>
+```java Custom Block Handler
+public class TeleporterHandler implements BlockHandler {
+    private final Pos destination;
+    
+    public TeleporterHandler(Pos destination) {
+        this.destination = destination;
+    }
+    
+    @Override
+    public void onTouch(Touch touch) {
+        Entity entity = touch.getEntity();
+        if (entity instanceof Player player) {
+            player.teleport(destination);
+            player.sendMessage(
+                Component.text("Teleported!").color(NamedTextColor.GREEN)
+            );
+        }
+    }
+    
+    @Override
+    public Key getKey() {
+        return Key.key("custom:teleporter");
+    }
+}
+
+// Register and use
+BlockManager manager = MinecraftServer.getBlockManager();
+manager.registerHandler("custom:teleporter", 
+    () -> new TeleporterHandler(new Pos(100, 64, 100)));
+
+Block teleporter = Block.DIAMOND_BLOCK.withHandler(
+    new TeleporterHandler(new Pos(100, 64, 100))
+);
+instance.setBlock(0, 64, 0, teleporter);
+```
+
+```java Block Properties
+public class BlockProperties {
+    public static void demonstrateProperties(Instance instance) {
+        // Create stairs facing different directions
+        Block northStairs = Block.OAK_STAIRS
+            .withProperty("facing", "north")
+            .withProperty("half", "top");
+        
+        Block southStairs = Block.OAK_STAIRS
+            .withProperty("facing", "south")
+            .withProperty("half", "bottom");
+        
+        instance.setBlock(0, 64, 0, northStairs);
+        instance.setBlock(1, 64, 0, southStairs);
+        
+        // Open/close door
+        Block closedDoor = Block.OAK_DOOR
+            .withProperty("open", "false");
+        Block openDoor = closedDoor
+            .withProperty("open", "true");
+        
+        instance.setBlock(2, 64, 0, closedDoor);
+        // Later...
+        instance.setBlock(2, 64, 0, openDoor);
+    }
+}
+```
+
+```java Ticking Block
+public class FurnaceHandler implements BlockHandler {
+    private int burnTime = 0;
+    
+    @Override
+    public boolean isTickable() {
+        return true;
+    }
+    
+    @Override
+    public void tick(Tick tick) {
+        if (burnTime > 0) {
+            burnTime--;
+            
+            // Spawn particles
+            Point pos = tick.getBlockPosition();
+            // Send particle packet to nearby players
+        }
+    }
+    
+    @Override
+    public boolean onInteract(Interaction interaction) {
+        Player player = interaction.getPlayer();
+        ItemStack item = player.getItemInMainHand();
+        
+        // Start burning if coal is used
+        if (item.material() == Material.COAL) {
+            burnTime = 200; // 10 seconds
+            player.sendMessage(Component.text("Furnace lit!"));
+        }
+        return true;
+    }
+    
+    @Override
+    public Key getKey() {
+        return Key.key("custom:furnace");
+    }
+}
+```
+
+```java Block Placement Rule
+public class PlacementRules {
+    public static void registerRules(BlockManager manager) {
+        // Torches can only be placed on solid blocks
+        BlockPlacementRule torchRule = new BlockPlacementRule(Block.TORCH);
+        torchRule.setPlacementCondition((instance, block, pos) -> {
+            Block below = instance.getBlock(pos.sub(0, 1, 0));
+            return below.isSolid();
+        });
+        manager.registerBlockPlacementRule(torchRule);
+        
+        // Water can't be placed in the nether
+        BlockPlacementRule waterRule = new BlockPlacementRule(Block.WATER);
+        waterRule.setPlacementCondition((instance, block, pos) -> {
+            return !instance.getDimensionType().equals(DimensionType.NETHER);
+        });
+        manager.registerBlockPlacementRule(waterRule);
+    }
+}
+```
+</CodeGroup>
+
+<Note>
+  Blocks are immutable. Methods like `withProperty()` and `withNbt()` return new Block instances rather than modifying the existing one.
+</Note>
+
+<Warning>
+  Block handlers must be thread-safe as they can be called from multiple threads simultaneously.
+</Warning>

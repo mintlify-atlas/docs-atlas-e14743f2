@@ -1,0 +1,582 @@
+---
+title: 'Coordinates'
+description: 'Work with positions, vectors, and coordinate systems in Minestom'
+icon: 'map-location-dot'
+---
+
+Minestom provides a robust coordinate system with three main types: **Point**, **Pos**, and **Vec**. These classes handle 3D positions, entity positions with rotation, and vector mathematics.
+
+## Point Interface
+
+The `Point` interface is the base for all coordinate types in Minestom. It represents a 3D point in space.
+
+### Basic Coordinates
+
+<ParamField path="x()" type="double">
+  Gets the X coordinate
+</ParamField>
+
+<ParamField path="y()" type="double">
+  Gets the Y coordinate
+</ParamField>
+
+<ParamField path="z()" type="double">
+  Gets the Z coordinate
+</ParamField>
+
+### Block Coordinates
+
+<ParamField path="blockX()" type="int">
+  Gets the floored value of the X coordinate (block position)
+</ParamField>
+
+<ParamField path="blockY()" type="int">
+  Gets the floored value of the Y coordinate (block position)
+</ParamField>
+
+<ParamField path="blockZ()" type="int">
+  Gets the floored value of the Z coordinate (block position)
+</ParamField>
+
+### Chunk and Section Coordinates
+
+<ParamField path="chunkX()" type="int">
+  Gets the chunk X coordinate (16-block sections)
+</ParamField>
+
+<ParamField path="chunkZ()" type="int">
+  Gets the chunk Z coordinate (16-block sections)
+</ParamField>
+
+<ParamField path="sectionX()" type="int">
+  Gets the section X coordinate
+</ParamField>
+
+<ParamField path="sectionY()" type="int">
+  Gets the section Y coordinate
+</ParamField>
+
+<ParamField path="sectionZ()" type="int">
+  Gets the section Z coordinate
+</ParamField>
+
+### Arithmetic Operations
+
+<ParamField path="add(x, y, z)" type="Point">
+  Adds the specified coordinates to this point
+  
+  ```java
+  Point newPoint = point.add(1.0, 2.0, 3.0);
+  ```
+</ParamField>
+
+<ParamField path="add(Point)" type="Point">
+  Adds another point to this point
+  
+  ```java
+  Point result = point1.add(point2);
+  ```
+</ParamField>
+
+<ParamField path="sub(x, y, z)" type="Point">
+  Subtracts the specified coordinates from this point
+</ParamField>
+
+<ParamField path="mul(x, y, z)" type="Point">
+  Multiplies this point by the specified coordinates
+</ParamField>
+
+<ParamField path="div(x, y, z)" type="Point">
+  Divides this point by the specified coordinates
+</ParamField>
+
+### Distance Calculations
+
+<ParamField path="distance(Point)" type="double">
+  Calculates the Euclidean distance between this point and another
+  
+  ```java
+  double dist = point1.distance(point2);
+  ```
+</ParamField>
+
+<ParamField path="distanceSquared(Point)" type="double">
+  Calculates the squared distance (more efficient, avoids sqrt)
+  
+  ```java
+  double distSq = point1.distanceSquared(point2);
+  if (distSq < 100) { // Within 10 blocks
+      // Do something
+  }
+  ```
+</ParamField>
+
+### Comparison Methods
+
+<ParamField path="samePoint(Point)" type="boolean">
+  Checks if two points have identical coordinates
+</ParamField>
+
+<ParamField path="sameBlock(Point)" type="boolean">
+  Checks if two points are in the same block
+</ParamField>
+
+<ParamField path="sameChunk(Point)" type="boolean">
+  Checks if two points are in the same chunk
+</ParamField>
+
+---
+
+## Pos (Position with View)
+
+The `Pos` record represents a position with yaw and pitch rotation, typically used for entities.
+
+```java
+public record Pos(double x, double y, double z, float yaw, float pitch)
+```
+
+### Creating Positions
+
+<CodeGroup>
+```java Basic Position
+// Create position at coordinates
+Pos pos = new Pos(10.5, 64.0, 20.5);
+
+// Create position with rotation
+Pos pos = new Pos(10.5, 64.0, 20.5, 90.0f, 0.0f);
+
+// Create from Point with rotation
+Pos pos = new Pos(point, 180.0f, 45.0f);
+```
+
+```java From Point
+// Convert Point to Pos
+Point point = new Vec(10, 64, 20);
+Pos pos = point.asPos();
+```
+</CodeGroup>
+
+### View Methods
+
+<ParamField path="yaw()" type="float">
+  Gets the yaw rotation (-180 to 180 degrees)
+</ParamField>
+
+<ParamField path="pitch()" type="float">
+  Gets the pitch rotation (-90 to 90 degrees)
+</ParamField>
+
+<ParamField path="withView(yaw, pitch)" type="Pos">
+  Creates a new position with the specified view angles
+  
+  ```java
+  Pos newPos = pos.withView(90.0f, 0.0f);
+  ```
+</ParamField>
+
+<ParamField path="withDirection(Point)" type="Pos">
+  Sets yaw and pitch to point toward a target
+  
+  ```java
+  Pos lookingAt = pos.withDirection(targetPoint);
+  ```
+</ParamField>
+
+<ParamField path="withLookAt(Point)" type="Pos">
+  Creates a position looking at a specific point
+  
+  ```java
+  Pos lookingAtPlayer = entity.getPosition().withLookAt(player.getPosition());
+  ```
+</ParamField>
+
+<ParamField path="direction()" type="Vec">
+  Gets a unit vector pointing in the direction of yaw and pitch
+  
+  ```java
+  Vec dir = pos.direction();
+  Point target = pos.add(dir.mul(10)); // 10 blocks ahead
+  ```
+</ParamField>
+
+<ParamField path="facing()" type="Direction">
+  Gets the closest cardinal direction this position is facing
+  
+  ```java
+  Direction dir = pos.facing(); // UP, DOWN, NORTH, SOUTH, EAST, or WEST
+  ```
+</ParamField>
+
+### Coordinate Methods
+
+<ParamField path="withCoord(x, y, z)" type="Pos">
+  Creates a new position with different coordinates but same view
+  
+  ```java
+  Pos moved = pos.withCoord(20.0, 70.0, 30.0);
+  ```
+</ParamField>
+
+<ParamField path="withX(x) / withY(y) / withZ(z)" type="Pos">
+  Creates a new position with one coordinate changed
+  
+  ```java
+  Pos higher = pos.withY(pos.y() + 10);
+  ```
+</ParamField>
+
+---
+
+## Vec (Vector)
+
+The `Vec` record represents an immutable 3D vector, ideal for directions, velocities, and vector math.
+
+```java
+public record Vec(double x, double y, double z)
+```
+
+### Predefined Vectors
+
+<ResponseField name="Vec.ZERO" type="Vec">
+  Vector with all components at 0
+</ResponseField>
+
+<ResponseField name="Vec.ONE" type="Vec">
+  Vector with all components at 1
+</ResponseField>
+
+<ResponseField name="Vec.SECTION" type="Vec">
+  Vector with all components at 16 (section size)
+</ResponseField>
+
+### Creating Vectors
+
+<CodeGroup>
+```java Basic Creation
+// 3D vector
+Vec vec = new Vec(1.0, 0.0, 0.0);
+
+// 2D vector (y=0)
+Vec vec = new Vec(1.0, 0.0);
+
+// Uniform vector
+Vec vec = new Vec(5.0); // (5, 5, 5)
+```
+
+```java From Point
+Point point = player.getPosition();
+Vec vec = point.asVec();
+```
+</CodeGroup>
+
+### Vector Operations
+
+<ParamField path="normalize()" type="Vec">
+  Converts to a unit vector (length of 1)
+  
+  ```java
+  Vec direction = vec.normalize();
+  ```
+</ParamField>
+
+<ParamField path="length()" type="double">
+  Gets the magnitude (length) of the vector
+  
+  ```java
+  double speed = velocity.length();
+  ```
+</ParamField>
+
+<ParamField path="lengthSquared()" type="double">
+  Gets the squared magnitude (more efficient)
+</ParamField>
+
+<ParamField path="dot(Vec)" type="double">
+  Calculates the dot product with another vector
+  
+  ```java
+  double similarity = vec1.normalize().dot(vec2.normalize());
+  // 1.0 = same direction, 0.0 = perpendicular, -1.0 = opposite
+  ```
+</ParamField>
+
+<ParamField path="cross(Vec)" type="Vec">
+  Calculates the cross product (perpendicular vector)
+  
+  ```java
+  Vec perpendicular = vec1.cross(vec2);
+  ```
+</ParamField>
+
+<ParamField path="angle(Vec)" type="double">
+  Gets the angle between two vectors in radians
+  
+  ```java
+  double angleRad = vec1.angle(vec2);
+  double angleDeg = Math.toDegrees(angleRad);
+  ```
+</ParamField>
+
+### Utility Operations
+
+<ParamField path="neg()" type="Vec">
+  Negates all components
+  
+  ```java
+  Vec opposite = vec.neg(); // (-x, -y, -z)
+  ```
+</ParamField>
+
+<ParamField path="abs()" type="Vec">
+  Gets absolute value of all components
+  
+  ```java
+  Vec positive = vec.abs();
+  ```
+</ParamField>
+
+<ParamField path="min(Vec)" type="Vec">
+  Creates vector with minimum of each component
+  
+  ```java
+  Vec mins = vec1.min(vec2);
+  ```
+</ParamField>
+
+<ParamField path="max(Vec)" type="Vec">
+  Creates vector with maximum of each component
+</ParamField>
+
+### Rotation Methods
+
+<ParamField path="rotateAroundX(angle)" type="Vec">
+  Rotates vector around X-axis (angle in radians)
+  
+  ```java
+  Vec rotated = vec.rotateAroundX(Math.PI / 2); // 90 degrees
+  ```
+</ParamField>
+
+<ParamField path="rotateAroundY(angle)" type="Vec">
+  Rotates vector around Y-axis (angle in radians)
+</ParamField>
+
+<ParamField path="rotateAroundZ(angle)" type="Vec">
+  Rotates vector around Z-axis (angle in radians)
+</ParamField>
+
+<ParamField path="rotateFromView(yaw, pitch)" type="Vec">
+  Rotates vector based on view angles
+  
+  ```java
+  Vec rotated = Vec.ONE.rotateFromView(player.getPosition());
+  ```
+</ParamField>
+
+<ParamField path="lerp(Vec, alpha)" type="Vec">
+  Linear interpolation between two vectors
+  
+  ```java
+  Vec midpoint = start.lerp(end, 0.5);
+  Vec quarterWay = start.lerp(end, 0.25);
+  ```
+</ParamField>
+
+---
+
+## BlockFace and Directions
+
+The `BlockFace` enum represents the six faces of a block.
+
+### BlockFace Values
+
+<ResponseField name="BlockFace" type="enum">
+  - `BOTTOM` - Down face (Direction.DOWN)
+  - `TOP` - Up face (Direction.UP)
+  - `NORTH` - North face
+  - `SOUTH` - South face
+  - `WEST` - West face
+  - `EAST` - East face
+</ResponseField>
+
+### Methods
+
+<ParamField path="toDirection()" type="Direction">
+  Converts BlockFace to Direction
+</ParamField>
+
+<ParamField path="getOppositeFace()" type="BlockFace">
+  Gets the opposite face
+  
+  ```java
+  BlockFace opposite = BlockFace.TOP.getOppositeFace(); // BOTTOM
+  ```
+</ParamField>
+
+<ParamField path="fromYaw(yaw)" type="BlockFace">
+  Gets horizontal BlockFace from yaw angle
+  
+  ```java
+  BlockFace face = BlockFace.fromYaw(player.getPosition().yaw());
+  ```
+</ParamField>
+
+<ParamField path="relative(BlockFace)" type="Point">
+  Gets adjacent point in the specified direction
+  
+  ```java
+  Point above = point.relative(BlockFace.TOP);
+  Point north = point.relative(BlockFace.NORTH);
+  ```
+</ParamField>
+
+---
+
+## CoordConversion Utilities
+
+The `CoordConversion` class provides utilities for converting between coordinate systems.
+
+### Constants
+
+<ResponseField name="SECTION_SIZE" type="int" default="16">
+  The size of a section (chunk width/depth)
+</ResponseField>
+
+<ResponseField name="REGION_SIZE" type="int" default="512">
+  The size of a region in blocks
+</ResponseField>
+
+### Conversion Methods
+
+<ParamField path="globalToBlock(xyz)" type="int">
+  Converts global coordinate to block coordinate (floor)
+  
+  ```java
+  int blockX = CoordConversion.globalToBlock(10.7); // 10
+  ```
+</ParamField>
+
+<ParamField path="globalToChunk(xz)" type="int">
+  Converts global coordinate to chunk coordinate
+  
+  ```java
+  int chunkX = CoordConversion.globalToChunk(100.0); // 6
+  ```
+</ParamField>
+
+<ParamField path="globalToSection(xyz)" type="int">
+  Converts global coordinate to section coordinate
+</ParamField>
+
+<ParamField path="globalToSectionRelative(xyz)" type="int">
+  Gets position within a section (0-15)
+  
+  ```java
+  int localX = CoordConversion.globalToSectionRelative(27); // 11
+  ```
+</ParamField>
+
+### Index Methods
+
+<ParamField path="chunkIndex(chunkX, chunkZ)" type="long">
+  Encodes chunk coordinates into a single long
+  
+  ```java
+  long index = CoordConversion.chunkIndex(10, 20);
+  int x = CoordConversion.chunkIndexGetX(index);
+  int z = CoordConversion.chunkIndexGetZ(index);
+  ```
+</ParamField>
+
+<ParamField path="sectionBlockIndex(x, y, z)" type="int">
+  Encodes section-relative coordinates (0-15) into an index
+</ParamField>
+
+### Hashing Methods
+
+<ParamField path="hashBlockCoord(x, y, z)" type="long">
+  Generates a hash for block coordinates
+  
+  ```java
+  long hash = CoordConversion.hashBlockCoord(point);
+  ```
+</ParamField>
+
+<ParamField path="hashGlobalCoord(x, y, z)" type="long">
+  Generates a hash for global (double) coordinates
+</ParamField>
+
+---
+
+## Practical Examples
+
+<CodeGroup>
+```java Entity Movement
+// Move entity forward
+Pos currentPos = entity.getPosition();
+Vec direction = currentPos.direction();
+Pos newPos = currentPos.add(direction.mul(5)); // Move 5 blocks forward
+entity.teleport(newPos);
+```
+
+```java Projectile Launch
+// Launch projectile in player's direction
+Pos playerPos = player.getPosition();
+Vec launchDir = playerPos.direction().mul(2.0); // 2 blocks/tick velocity
+
+Entity projectile = new Entity(EntityType.ARROW);
+projectile.setInstance(instance, playerPos);
+projectile.setVelocity(launchDir);
+```
+
+```java Distance Check
+// Check if players are within range
+Pos pos1 = player1.getPosition();
+Pos pos2 = player2.getPosition();
+
+if (pos1.distanceSquared(pos2) < 100) { // Within 10 blocks
+    // Players are close
+}
+```
+
+```java Block Placement
+// Get block player is looking at
+Pos pos = player.getPosition();
+Vec dir = pos.direction();
+
+for (int i = 0; i < 5; i++) {
+    Point check = pos.add(dir.mul(i));
+    Block block = instance.getBlock(check);
+    if (!block.isAir()) {
+        // Found a block
+        Point placePos = check.relative(BlockFace.TOP);
+        instance.setBlock(placePos, Block.STONE);
+        break;
+    }
+}
+```
+
+```java Chunk Operations
+// Get all chunks in radius
+Pos center = player.getPosition();
+int radius = 5;
+
+for (int x = -radius; x <= radius; x++) {
+    for (int z = -radius; z <= radius; z++) {
+        Point chunkPos = center.add(x * 16, 0, z * 16);
+        int chunkX = chunkPos.chunkX();
+        int chunkZ = chunkPos.chunkZ();
+        
+        instance.loadChunk(chunkX, chunkZ);
+    }
+}
+```
+</CodeGroup>
+
+<Note>
+  All coordinate classes are **immutable**. Methods like `add()`, `mul()`, and `withX()` return new instances rather than modifying the original.
+</Note>
+
+<Note>
+  For performance-critical distance checks, use `distanceSquared()` instead of `distance()` to avoid the expensive square root calculation.
+</Note>
