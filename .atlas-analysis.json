@@ -1,0 +1,109 @@
+{
+  "projectType": "framework",
+  "projectName": "Minestom",
+  "projectDescription": "A lightweight, high-performance Minecraft server framework for building custom server implementations from scratch",
+  "theme": "aspen",
+  "primaryColor": "#f76e61",
+  "lightColor": "#fb75a4",
+  "darkColor": "#a04d69",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/architecture",
+              "core-concepts/instances",
+              "core-concepts/threading",
+              "core-concepts/events"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/entities",
+              "guides/blocks",
+              "guides/commands",
+              "guides/inventories",
+              "guides/networking",
+              "guides/world-generation"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/performance",
+              "advanced/extensions",
+              "advanced/testing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/server",
+              "api/instances",
+              "api/entities",
+              "api/blocks"
+            ]
+          },
+          {
+            "group": "Systems",
+            "pages": [
+              "api/events",
+              "api/commands",
+              "api/inventories",
+              "api/networking"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/coordinates",
+              "api/tags",
+              "api/registry"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-threaded architecture for high performance",
+    "Instance-based world system for scalability",
+    "Modern event-driven API",
+    "Built-in command system with Brigadier integration",
+    "Zero vanilla overhead - build only what you need",
+    "Full 1.21 protocol support"
+  ],
+  "publicApiSurface": [
+    "MinecraftServer",
+    "Instance",
+    "Entity",
+    "Player",
+    "Block",
+    "EventNode",
+    "CommandManager",
+    "InstanceManager",
+    "ConnectionManager",
+    "BlockManager",
+    "InventoryManager",
+    "TagHandler",
+    "Scheduler",
+    "ThreadDispatcher"
+  ]
+}
